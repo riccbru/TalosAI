@@ -1,49 +1,66 @@
-import shutil
+import time
 
-import psutil
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import get_db
+from app.core.stats import (
+    _utc_now,
+    get_db_stats,
+    get_ollama_stats,
+    get_service_error,
+    get_system_stats,
+)
+from app.db.session import engine, get_db
 
 router = APIRouter()
 
+START_TIME = time.time()
+
 @router.get("/")
 async def backend_health():
+    t0 = time.perf_counter()
     try:
-        cpu_usage = psutil.cpu_percent(interval=None)
-        memory = psutil.virtual_memory()
-        total, used, free = shutil.disk_usage("/")
-        body = {
-            "status": "up",
-            "system": {
-                "cpu_load_percent": cpu_usage,
-                "memory_usage_percent": memory.percent,
-                "disk_free_gb": f"{free / (2 ** 30):.2f}"
-            }
+        stats = get_system_stats()
+        return {
+            "status": "degraded" if stats["warnings"] else "up",
+            "timestamp": _utc_now(),
+            "uptime_seconds": round(time.time() - START_TIME, 1),
+            "response_time_ms": round((time.perf_counter() - t0) * 1000, 3),
+            **stats
         }
-        return JSONResponse(status_code=200, content=body)
     except Exception as e:
-        body = {
-            "status": "down",
-            "error": type(e).__name__,
-            "message": e.args[-1] if e.args else str(e)
-        }
-        return JSONResponse(status_code=503, content=body)
+        body = get_service_error(e)
+        return JSONResponse(
+            status_code=503,
+            content=body
+        )
 
 @router.get("/db")
 async def database_health(db: AsyncSession = Depends(get_db)):
     try:
-        await db.execute(text("SELECT 1"))
+        stats = await get_db_stats(db, engine)
+
         return {
-            "status": "connected"
+            "timestamp": _utc_now(),
+            **stats
         }
     except Exception as e:
-        body = {
-            "status": "down",
-            "error": type(e).__name__,
-            "message": e.args[-1] if e.args else str(e)
-        }
-        return JSONResponse(status_code=503, content=body)
+        body = get_service_error(e)
+        return JSONResponse(
+            status_code=503,
+            content=body
+        )
+
+@router.get("/ollama")
+async def ollama_health():
+    try:
+        stats = await get_ollama_stats()
+        return stats
+    except Exception as e:
+        body = get_service_error(e)
+        return JSONResponse(
+            status_code=503,
+            content=body
+        )
+

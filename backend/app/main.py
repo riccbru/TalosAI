@@ -6,10 +6,9 @@ app = FastAPI(
     title="TalosAI API",
     description="AI-powered Penetration Testing Agent"
 )
-app.include_router(health_router, prefix="/api/v1/health")
-
 
 @app.get("/")
 async def root():
     return {"message": "Welcome to TalosAI API"}
 
+app.include_router(health_router, prefix="/api/v1/health")
