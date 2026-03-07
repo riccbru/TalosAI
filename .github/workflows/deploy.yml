@@ -23,3 +23,8 @@ jobs:
         run: |
           docker compose down
           docker compose up -d --build
+
+# curl -s -X 'GET' 'http://localhost:8000' -H 'accept: application/json'
+# curl -s -L -X 'GET' 'http://localhost:8000/api/v1/health' -H 'accept: application/json' | jq
+# curl -s -X 'GET' 'http://localhost:8000/api/v1/health/db' -H 'accept: application/json'
+# curl -s -X 'GET' 'http://localhost:8000/api/v1/health/ollama' -H 'accept: application/json'
