@@ -12,4 +12,4 @@ app = FastAPI(
 async def root():
     return {"message": "Welcome to TalosAI API"}
 
-app.include_router(health_router, prefix="/api/v1/health")
+app.include_router(health_router, prefix="/api/v1/health", tags=["health"])
