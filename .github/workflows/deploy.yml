@@ -1,0 +1,17 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: System Info
+        run: |
+          echo "Running on $(hostname)"
+          ls -R
