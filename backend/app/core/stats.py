@@ -1,3 +1,4 @@
+import asyncio
 import shutil
 import subprocess
 import time
@@ -5,6 +6,7 @@ from datetime import datetime, timezone
 
 import httpx
 import psutil
+import pynvml
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
@@ -27,36 +29,53 @@ def get_system_stats() -> dict:
 
     gpus = None
     try:
-        out = subprocess.check_output(
-            [
-                "nvidia-smi",
-                "--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw",
-                "--format=csv,noheader,nounits",
-            ],
-            timeout=2,
-            stderr=subprocess.DEVNULL,
-        ).decode()
+        # out = subprocess.check_output(
+        #     [
+        #         "nvidia-smi",
+        #         "--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw",
+        #         "--format=csv,noheader,nounits",
+        #     ],
+        #     timeout=2,
+        #     stderr=subprocess.DEVNULL,
+        # ).decode()
 
+        # gpus = []
+        # for line in out.strip().splitlines():
+        #     name, util, mem_used, mem_total, temp, power = [x.strip() for x in line.split(",")]  # noqa: E501
+        #     vram_used, vram_total = int(mem_used), int(mem_total)
+
+        #     gpu_warnings = []
+        #     if int(util) > 95: gpu_warnings.append("high_gpu_utilization")
+        #     if vram_total and (vram_used / vram_total) > 0.92: gpu_warnings.append("vram_near_full")  # noqa: E501
+        #     if int(temp) > 85: gpu_warnings.append("high_temperature")
+
+        #     warnings.extend(gpu_warnings)
+        #     gpus.append({
+        #         "name": name,
+        #         "utilization_percent": int(util),
+        #         "vram_used_mb": vram_used,
+        #         "vram_total_mb": vram_total,
+        #         "vram_used_percent": round(vram_used / vram_total * 100, 1) if vram_total else None,
+        #         "temperature_c": int(temp),
+        #         "power_draw_w": round(float(power), 1),
+        #         "warnings": gpu_warnings,
+        #     })
         gpus = []
-        for line in out.strip().splitlines():
-            name, util, mem_used, mem_total, temp, power = [x.strip() for x in line.split(",")]  # noqa: E501
-            vram_used, vram_total = int(mem_used), int(mem_total)
+        pynvml.nvmlInit()
+        device_count = pynvml.nvmlDeviceGetCount()
+        gpus = []
+        for i in range(device_count):
+            handle = pynvml.nvmlDeviceGetHandleByIndex(i)
+            info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            name = pynvml.nvmlDeviceGetName(handle)
+            util = pynvml.nvmlDeviceGetUtilizationRates(handle)
 
-            gpu_warnings = []
-            if int(util) > 95: gpu_warnings.append("high_gpu_utilization")
-            if vram_total and (vram_used / vram_total) > 0.92: gpu_warnings.append("vram_near_full")  # noqa: E501
-            if int(temp) > 85: gpu_warnings.append("high_temperature")
-
-            warnings.extend(gpu_warnings)
             gpus.append({
+                "id": i,
                 "name": name,
-                "utilization_percent": int(util),
-                "vram_used_mb": vram_used,
-                "vram_total_mb": vram_total,
-                "vram_used_percent": round(vram_used / vram_total * 100, 1) if vram_total else None,
-                "temperature_c": int(temp),
-                "power_draw_w": round(float(power), 1),
-                "warnings": gpu_warnings,
+                "memory_used_gb": round(info.used / 1024**3, 2),
+                "memory_total_gb": round(info.total / 1024**3, 2),
+                "load_percent": util.gpu
             })
     except (FileNotFoundError, subprocess.SubprocessError):
         gpus = "unavailable"
@@ -118,33 +137,57 @@ async def get_ollama_stats() -> dict:
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
             t0 = time.perf_counter()
-            r = await client.get(f"{base_url}/api/ps")
+
+            responses = await asyncio.gather(
+                client.get(f"{base_url}/api/tags"),
+                client.get(f"{base_url}/api/ps"),
+                return_exceptions=True
+            )
+
             latency_ms = round((time.perf_counter() - t0) * 1000, 2)
 
-            r.raise_for_status()
-            data = r.json()
+            for r in responses:
+                if isinstance(r, Exception):
+                    raise r
+                r.raise_for_status()
 
-            loaded_models = [
+            library_data = responses[0].json()
+            active_data = responses[1].json()
+
+            library = [
                 {
                     "name": m.get("name"),
-                    "size_gb": round(m.get("size", 0) / 2 ** 30, 2),
-                    "vram_size_gb": round(m.get("size_vram", 0) / 2 ** 30, 2),
-                    "expires_at": m.get("expires_at"),
+                    "size_gb": round(m.get("size", 0) / 1024**3, 2),
+                    "modified": m.get("modified_at")
                 }
-                for m in data.get("models", [])
+                for m in library_data.get("models", [])
+            ]
+
+            active = [
+                {
+                    "name": m.get("name"),
+                    "vram_gb": round(m.get("size_vram", 0) / 1024**3, 2),
+                    "expires_at": m.get("expires_at")
+                }
+                for m in active_data.get("models", [])
             ]
 
             return {
                 "status": "up",
                 "latency_ms": latency_ms,
-                "loaded_models": loaded_models,
-                "loaded_model_count": len(loaded_models),
+                "summary": {
+                    "total_installed": len(library),
+                    "currently_active": len(active)
+                },
+                "active_models": active,
+                "library": library
             }
+
     except Exception as e:
         return {
             "status": "down",
             "error": type(e).__name__,
-            "message": e.args[-1] if e.args else str(e),
+            "message": str(e)
         }
 
 def get_service_error(e: Exception) -> dict:
