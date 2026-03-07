@@ -19,4 +19,4 @@ ENV/
 .env.*.local
 
 # PostgreSQL
-*.sql
+backend/app/db/init/*.sql
