@@ -17,7 +17,7 @@ router = APIRouter()
 
 START_TIME = time.time()
 
-@router.get("/")
+@router.get("")
 async def backend_health():
     t0 = time.perf_counter()
     try:
