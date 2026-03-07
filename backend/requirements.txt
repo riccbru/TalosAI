@@ -16,7 +16,6 @@ psutil==7.2.2
 pydantic==2.12.5
 pydantic-settings==2.13.1
 pydantic_core==2.41.5
-pynvml==13.0.1
 python-dotenv==1.2.2
 ruff==0.15.5
 SQLAlchemy==2.0.48

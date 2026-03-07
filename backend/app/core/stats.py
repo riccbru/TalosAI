@@ -1,4 +1,5 @@
 import asyncio
+import platform
 import shutil
 import subprocess
 import time
@@ -6,7 +7,6 @@ from datetime import datetime, timezone
 
 import httpx
 import psutil
-import pynvml
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
@@ -21,45 +21,18 @@ def get_system_stats() -> dict:
 
     cpu_percent = psutil.cpu_percent(interval=None)
     mem = psutil.virtual_memory()
-    if cpu_percent > 85: warnings.append("high_cpu")
-    if mem.percent > 90: warnings.append("high_memory")
+    if cpu_percent > 85:
+        warnings.append("high_cpu")
+    if mem.percent > 90:
+        warnings.append("high_memory")
 
     total_disk, used_disk, free_disk = shutil.disk_usage("/")
-    if (free_disk / total_disk) < 0.10: warnings.append("low_disk")
+    if (free_disk / total_disk) < 0.10:
+        warnings.append("low_disk")
 
     gpus = None
     try:
-        # out = subprocess.check_output(
-        #     [
-        #         "nvidia-smi",
-        #         "--query-gpu=name,utilization.gpu,memory.used,memory.total,temperature.gpu,power.draw",
-        #         "--format=csv,noheader,nounits",
-        #     ],
-        #     timeout=2,
-        #     stderr=subprocess.DEVNULL,
-        # ).decode()
-
-        # gpus = []
-        # for line in out.strip().splitlines():
-        #     name, util, mem_used, mem_total, temp, power = [x.strip() for x in line.split(",")]  # noqa: E501
-        #     vram_used, vram_total = int(mem_used), int(mem_total)
-
-        #     gpu_warnings = []
-        #     if int(util) > 95: gpu_warnings.append("high_gpu_utilization")
-        #     if vram_total and (vram_used / vram_total) > 0.92: gpu_warnings.append("vram_near_full")  # noqa: E501
-        #     if int(temp) > 85: gpu_warnings.append("high_temperature")
-
-        #     warnings.extend(gpu_warnings)
-        #     gpus.append({
-        #         "name": name,
-        #         "utilization_percent": int(util),
-        #         "vram_used_mb": vram_used,
-        #         "vram_total_mb": vram_total,
-        #         "vram_used_percent": round(vram_used / vram_total * 100, 1) if vram_total else None,
-        #         "temperature_c": int(temp),
-        #         "power_draw_w": round(float(power), 1),
-        #         "warnings": gpu_warnings,
-        #     })
+        import pynvml
         gpus = []
         pynvml.nvmlInit()
         device_count = pynvml.nvmlDeviceGetCount()
@@ -73,24 +46,32 @@ def get_system_stats() -> dict:
             gpus.append({
                 "id": i,
                 "name": name,
-                "memory_used_gb": round(info.used / 1024**3, 2),
-                "memory_total_gb": round(info.total / 1024**3, 2),
+                "memory_used_gb": round(info.used / 1024 ** 3, 2),
+                "memory_total_gb": round(info.total / 1024 ** 3, 2),
                 "load_percent": util.gpu
             })
-    except (FileNotFoundError, subprocess.SubprocessError):
+    except (FileNotFoundError, subprocess.SubprocessError, Exception):
         gpus = "unavailable"
 
     return {
+        "system": {
+            "os": platform.system(),
+            "os_release": platform.release(),
+            "os_version": platform.version(),
+            "architecture": platform.machine(),
+            "hostname": platform.node(),
+            "python_version": platform.python_version(),
+        },
         "cpu": {
             "usage_percent": cpu_percent,
             "load_avg": list(psutil.getloadavg()),
         },
         "memory": {
             "used_percent": mem.percent,
-            "available_gb": round(mem.available / 2**30, 2),
+            "available_gb": round(mem.available / 2 ** 30, 2),
         },
         "disk": {
-            "free_gb": round(free_disk / 2**30, 2),
+            "free_gb": round(free_disk / 2 ** 30, 2),
             "used_percent": round(used_disk / total_disk * 100, 1),
         },
         "gpu": gpus,
