@@ -4,6 +4,7 @@ from fastapi import FastAPI
 app = FastAPI(
     version="0.1.0",
     title="TalosAI API",
+    redirect_slashes=False,
     description="AI-powered Penetration Testing Agent"
 )
 
