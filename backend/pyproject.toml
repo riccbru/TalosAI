@@ -1,0 +1,14 @@
+[tool.ruff]
+# Target Python version
+line-length = 88
+target-version = "py314"
+
+[tool.ruff.lint]
+# Enable Pyflakes (F), Pycodestyle (E, W), and Isort (I)
+ignore = []
+select = ["F", "E", "W", "I"]
+
+[tool.ruff.format]
+# Use double quotes (standard Black style)
+quote-style = "double"
+indent-style = "tab"

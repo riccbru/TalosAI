@@ -17,3 +17,6 @@ ENV/
 .env
 .env.local
 .env.*.local
+
+# PostgreSQL
+*.sql
