@@ -20,3 +20,7 @@ ENV/
 
 # PostgreSQL
 backend/app/db/init/*.sql
+
+# Misc
+.DS_Store
+/img/
