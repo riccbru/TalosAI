@@ -1,4 +1,3 @@
-import asyncio
 import platform
 import shutil
 import subprocess
@@ -7,6 +6,7 @@ from datetime import datetime, timezone
 
 import httpx
 import psutil
+from ollama import Client
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
@@ -119,46 +119,20 @@ async def get_ollama_stats() -> dict:
         async with httpx.AsyncClient(timeout=3.0) as client:
             t0 = time.perf_counter()
 
-            responses = await asyncio.gather(
-                client.get(f"{base_url}/api/tags"),
-                client.get(f"{base_url}/api/ps"),
-                return_exceptions=True
+            client = Client(
+                host=base_url
             )
+            library = client.list()
+            active = client.ps()
 
             latency_ms = round((time.perf_counter() - t0) * 1000, 2)
-
-            for r in responses:
-                if isinstance(r, Exception):
-                    raise r
-                r.raise_for_status()
-
-            library_data = responses[0].json()
-            active_data = responses[1].json()
-
-            library = [
-                {
-                    "name": m.get("name"),
-                    "size_gb": round(m.get("size", 0) / 1024**3, 2),
-                    "modified": m.get("modified_at")
-                }
-                for m in library_data.get("models", [])
-            ]
-
-            active = [
-                {
-                    "name": m.get("name"),
-                    "vram_gb": round(m.get("size_vram", 0) / 1024**3, 2),
-                    "expires_at": m.get("expires_at")
-                }
-                for m in active_data.get("models", [])
-            ]
 
             return {
                 "status": "up",
                 "latency_ms": latency_ms,
                 "summary": {
-                    "total_installed": len(library),
-                    "currently_active": len(active)
+                    "total_installed": len(library.get("models", [])),
+                    "currently_active": len(active.get("models", []))
                 },
                 "active_models": active,
                 "library": library
