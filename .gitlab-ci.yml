@@ -1,0 +1,17 @@
+stages:
+  - deploy
+
+deploy_job:
+  stage: deploy
+  tags:
+    - talosai-deploy
+  only:
+    - main
+  script:
+    - echo "POSTGRES_DB=${POSTGRES_DB}" > .env
+    - echo "POSTGRES_USER=${POSTGRES_USER}" >> .env
+    - echo "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}" >> .env
+    - echo "DATABASE_URL=${DATABASE_URL}" >> .env
+    - echo "OLLAMA_BASE_URL=${OLLAMA_BASE_URL}" >> .env
+    - docker compose down -v
+    - docker compose -f docker-compose.prod.yml up -d --build
