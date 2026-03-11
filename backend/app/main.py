@@ -1,5 +1,6 @@
-from api.v1.endpoints.health import router as health_router
 from fastapi import FastAPI
+
+from app.api.v1.endpoints.health import router as health_router
 
 app = FastAPI(
     version="0.1.0",
