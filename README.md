@@ -23,18 +23,25 @@ TalosAI is a sovereign, self-hosted penetration testing agent designed for autom
 
 # Installation
 
-## Packages:
+### Packages:
 - `docker`
 - `nvidia-container-toolkit`
 
-## Setup
+### Setup
 ```bash
 git clone https://github.com/riccbru/TalosAI.git
 cd TalosAI
 cp .env.sample .env
 ```
 
-## Deploy
+# Deploy
+
+### Development
 ```bash
 docker-compose up --build
+```
+
+### Production
+```bash
+docker compose -f docker-compose.prod.yml up -d --build
 ```
