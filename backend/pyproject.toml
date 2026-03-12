@@ -10,5 +10,7 @@ select = ["F", "E", "W", "I"]
 
 [tool.ruff.format]
 # Use double quotes (standard Black style)
+line-ending = "auto"
 quote-style = "double"
-indent-style = "tab"
+indent-style = "space"
+skip-magic-trailing-comma = false

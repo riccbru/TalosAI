@@ -13,11 +13,9 @@ engine = create_async_engine(
 )
 
 AsyncSessionLocal = async_sessionmaker(
-    bind=engine,
-    autoflush=False,
-    class_=AsyncSession,
-    expire_on_commit=False
+    bind=engine, autoflush=False, class_=AsyncSession, expire_on_commit=False
 )
+
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:

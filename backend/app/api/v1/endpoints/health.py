@@ -17,6 +17,7 @@ router = APIRouter()
 
 START_TIME = time.time()
 
+
 @router.get("")
 async def backend_health():
     t0 = time.perf_counter()
@@ -27,30 +28,23 @@ async def backend_health():
             "timestamp": _utc_now(),
             "uptime_seconds": round(time.time() - START_TIME, 1),
             "response_time_ms": round((time.perf_counter() - t0) * 1000, 3),
-            **stats
+            **stats,
         }
     except Exception as e:
         body = get_service_error(e)
-        return JSONResponse(
-            status_code=503,
-            content=body
-        )
+        return JSONResponse(status_code=503, content=body)
+
 
 @router.get("/db")
 async def database_health(db: AsyncSession = Depends(get_db)):
     try:
         stats = await get_db_stats(db, engine)
 
-        return {
-            "timestamp": _utc_now(),
-            **stats
-        }
+        return {"timestamp": _utc_now(), **stats}
     except Exception as e:
         body = get_service_error(e)
-        return JSONResponse(
-            status_code=503,
-            content=body
-        )
+        return JSONResponse(status_code=503, content=body)
+
 
 @router.get("/ollama")
 async def ollama_health():
@@ -59,8 +53,4 @@ async def ollama_health():
         return stats
     except Exception as e:
         body = get_service_error(e)
-        return JSONResponse(
-            status_code=503,
-            content=body
-        )
-
+        return JSONResponse(status_code=503, content=body)
