@@ -3,10 +3,12 @@ from argon2.exceptions import VerifyMismatchError
 
 ph = PasswordHasher()
 
+
 def get_password_hash(password: str) -> str:
     hash = ph.hash(password)
-    print(hash)
+    print(f"\n\nHASH:\n{hash}\n\n")
     return hash
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:

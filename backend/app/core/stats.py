@@ -16,6 +16,7 @@ from app.core.config import settings
 def _utc_now():
     return datetime.now(timezone.utc).isoformat()
 
+
 def get_system_stats() -> dict:
     warnings = []
 
@@ -33,6 +34,7 @@ def get_system_stats() -> dict:
     gpus = None
     try:
         import pynvml
+
         gpus = []
         pynvml.nvmlInit()
         device_count = pynvml.nvmlDeviceGetCount()
@@ -43,14 +45,16 @@ def get_system_stats() -> dict:
             name = pynvml.nvmlDeviceGetName(handle)
             util = pynvml.nvmlDeviceGetUtilizationRates(handle)
 
-            gpus.append({
-                "id": i,
-                "name": name,
-                "memory_used_gb": round(info.used / 1024 ** 3, 2),
-                "memory_total_gb": round(info.total / 1024 ** 3, 2),
-                "load_percent": util.gpu
-            })
-    except (FileNotFoundError, subprocess.SubprocessError, Exception):
+            gpus.append(
+                {
+                    "id": i,
+                    "name": name,
+                    "memory_used_gb": round(info.used / 1024**3, 2),
+                    "memory_total_gb": round(info.total / 1024**3, 2),
+                    "load_percent": util.gpu,
+                }
+            )
+    except FileNotFoundError, subprocess.SubprocessError, Exception:
         gpus = "unavailable"
 
     return {
@@ -68,15 +72,16 @@ def get_system_stats() -> dict:
         },
         "memory": {
             "used_percent": mem.percent,
-            "available_gb": round(mem.available / 2 ** 30, 2),
+            "available_gb": round(mem.available / 2**30, 2),
         },
         "disk": {
-            "free_gb": round(free_disk / 2 ** 30, 2),
+            "free_gb": round(free_disk / 2**30, 2),
             "used_percent": round(used_disk / total_disk * 100, 1),
         },
         "gpu": gpus,
-        "warnings": warnings
+        "warnings": warnings,
     }
+
 
 async def get_db_stats(db: AsyncSession, engine: AsyncEngine) -> dict:
     t0 = time.perf_counter()
@@ -106,11 +111,12 @@ async def get_db_stats(db: AsyncSession, engine: AsyncEngine) -> dict:
             "latency_ms": latency_ms,
             "version": db_version,
             "pool": pool_stats,
-            "warnings": warnings
+            "warnings": warnings,
         }
 
     except Exception as e:
         raise e
+
 
 async def get_ollama_stats() -> dict:
     base_url = settings.OLLAMA_BASE_URL.rstrip("/")
@@ -119,9 +125,7 @@ async def get_ollama_stats() -> dict:
         async with httpx.AsyncClient(timeout=3.0) as client:
             t0 = time.perf_counter()
 
-            client = Client(
-                host=base_url
-            )
+            client = Client(host=base_url)
             library = client.list()
             active = client.ps()
 
@@ -132,18 +136,15 @@ async def get_ollama_stats() -> dict:
                 "latency_ms": latency_ms,
                 "summary": {
                     "total_installed": len(library.get("models", [])),
-                    "currently_active": len(active.get("models", []))
+                    "currently_active": len(active.get("models", [])),
                 },
                 "active_models": active,
-                "library": library
+                "library": library,
             }
 
     except Exception as e:
-        return {
-            "status": "down",
-            "error": type(e).__name__,
-            "message": str(e)
-        }
+        return {"status": "down", "error": type(e).__name__, "message": str(e)}
+
 
 def get_service_error(e: Exception) -> dict:
     return {
@@ -151,4 +152,4 @@ def get_service_error(e: Exception) -> dict:
         "timestamp": _utc_now(),
         "error": type(e).__name__,
         "message": e.args[-1] if e.args else str(e),
-        }
+    }

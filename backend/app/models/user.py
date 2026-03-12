@@ -14,6 +14,7 @@ class UserRole(str, enum.Enum):
     USER = "user"
     AUDITOR = "auditor"
 
+
 class User(Base):
     __tablename__ = "users"
 
@@ -28,13 +29,13 @@ class User(Base):
     created_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
-        nullable=False
+        nullable=False,
     )
     updated_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
-        nullable=False
+        nullable=False,
     )
     password_changed_at = Column(
         DateTime(timezone=True),
