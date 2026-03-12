@@ -3,10 +3,10 @@ from sqlalchemy.future import select
 
 from app.core.security import get_password_hash, verify_password
 from app.models.user import User
-from app.schemas.user import UserCreate
+from app.schemas.user import UserSignup
 
 
-async def create_user(db: AsyncSession, user_in: UserCreate):
+async def create_user(db: AsyncSession, user_in: UserSignup):
     email = user_in.email
     password = user_in.password
     hashed_password = get_password_hash(password)
