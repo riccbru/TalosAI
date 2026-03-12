@@ -4,13 +4,11 @@ import subprocess
 import time
 from datetime import datetime, timezone
 
-import httpx
 import psutil
-from ollama import Client
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from app.core.config import settings
+from app.core.ollama import ollama_client
 
 
 def _utc_now():
@@ -54,7 +52,7 @@ def get_system_stats() -> dict:
                     "load_percent": util.gpu,
                 }
             )
-    except FileNotFoundError, subprocess.SubprocessError, Exception:
+    except (FileNotFoundError, subprocess.SubprocessError, Exception):
         gpus = "unavailable"
 
     return {
@@ -119,28 +117,25 @@ async def get_db_stats(db: AsyncSession, engine: AsyncEngine) -> dict:
 
 
 async def get_ollama_stats() -> dict:
-    base_url = settings.OLLAMA_BASE_URL.rstrip("/")
 
     try:
-        async with httpx.AsyncClient(timeout=3.0) as client:
-            t0 = time.perf_counter()
+        t0 = time.perf_counter()
 
-            client = Client(host=base_url)
-            library = client.list()
-            active = client.ps()
+        models_library = await ollama_client.list()
+        active_models = await ollama_client.ps()
 
-            latency_ms = round((time.perf_counter() - t0) * 1000, 2)
+        latency_ms = round((time.perf_counter() - t0) * 1000, 2)
 
-            return {
-                "status": "up",
-                "latency_ms": latency_ms,
-                "summary": {
-                    "total_installed": len(library.get("models", [])),
-                    "currently_active": len(active.get("models", [])),
-                },
-                "active_models": active,
-                "library": library,
-            }
+        return {
+            "status": "up",
+            "latency_ms": latency_ms,
+            "summary": {
+                "total_installed": len(models_library.models),
+                "currently_active": len(active_models.models),
+            },
+            "active_models": active_models,
+            "library": models_library,
+        }
 
     except Exception as e:
         return {"status": "down", "error": type(e).__name__, "message": str(e)}
