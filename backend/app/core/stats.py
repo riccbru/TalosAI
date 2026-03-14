@@ -81,64 +81,26 @@ def get_system_stats() -> dict:
     }
 
 
-# async def get_db_stats(db: AsyncSession, engine: AsyncEngine) -> dict:
-#     t0 = time.perf_counter()
-#     warnings = []
-
-#     try:
-#         result = await db.execute(text("SELECT version()"))
-#         db_version = result.scalar()
-#         latency_ms = round((time.perf_counter() - t0) * 1000, 3)
-
-#         raw_pool = engine.sync_engine.pool
-#         pool_stats = {}
-#         for attr in ("size", "checkedin", "checkedout", "overflow"):
-#             if hasattr(raw_pool, attr):
-#                 pool_stats[attr] = getattr(raw_pool, attr)()
-
-#         checked_out = pool_stats.get("checkedout", 0)
-#         pool_size = pool_stats.get("size", 1)
-
-#         if pool_size > 0 and (checked_out / pool_size) > 0.85:
-#             warnings.append("pool_near_capacity")
-#         if latency_ms > 200:
-#             warnings.append("high_query_latency")
-
-#         return {
-#             "status": "degraded" if warnings else "connected",
-#             "latency_ms": latency_ms,
-#             "version": db_version,
-#             "pool": pool_stats,
-#             "warnings": warnings,
-#         }
-
-#     except Exception as e:
-#         raise e
-
 async def get_db_stats(db: AsyncSession, engine: AsyncEngine) -> dict:
     t0 = time.perf_counter()
     warnings = []
-    
-    # Initialize default "down" state
+
     db_version = "Unknown"
     latency_ms = 0.0
     pool_stats = {}
     connection_state = "disconnected"
 
     try:
-        # Attempt handshake
         result = await db.execute(text("SELECT version()"))
         db_version = result.scalar()
         latency_ms = round((time.perf_counter() - t0) * 1000, 3)
         connection_state = "connected"
 
-        # Gather Pool Metrics
         raw_pool = engine.sync_engine.pool
         for attr in ("size", "checkedin", "checkedout", "overflow"):
             if hasattr(raw_pool, attr):
                 pool_stats[attr] = getattr(raw_pool, attr)()
 
-        # Warning Logic
         checked_out = pool_stats.get("checkedout", 0)
         pool_size = pool_stats.get("size", 1)
         if pool_size > 0 and (checked_out / pool_size) > 0.85:
@@ -152,7 +114,7 @@ async def get_db_stats(db: AsyncSession, engine: AsyncEngine) -> dict:
 
     return {
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "status": "up", # The endpoint is alive
+        "status": "up",
         "connection": {
             "state": connection_state,
             "latency_ms": latency_ms,

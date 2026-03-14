@@ -1,6 +1,17 @@
-from app.agents.base import BaseAgent
+from crewai import Agent
+
+from app.agents.factory import get_llm_for_agent
+from app.core.config import settings
 
 
-class Tester(BaseAgent):
-    async def analyze_vulnerabilities(self, scan_data: str):
-        return await self.chat(f"Analyze these open ports for CVEs: {scan_data}")
+def get_tester_agent() -> Agent:
+    config = settings.MODEL_ASSIGNMENT["tester"]
+
+    return Agent(
+        verbose=True,
+        allow_delegation=False,
+        backstory=config.system_prompt,
+        llm=get_llm_for_agent("tester"),
+        role="Exploitation Analyst",
+        goal="Identify vulnerabilities and CVEs based on reconnaissance data"
+    )

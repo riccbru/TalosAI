@@ -1,6 +1,18 @@
-from app.agents.base import BaseAgent
+from crewai import Agent
+
+from app.agents.factory import get_llm_for_agent
+from app.core.config import settings
 
 
-class Planner(BaseAgent):
-    async def create_plan(self, target: str):
-        return await self.chat(f"Create a step-by-step pentest plan for {target}")
+def get_planner_agent() -> Agent:
+    config = settings.MODEL_ASSIGNMENT["planner"]
+
+    return Agent(
+        memory=True,
+        verbose=True,
+        allow_delegation=True,
+        backstory=config.system_prompt,
+        llm=get_llm_for_agent("planner"),
+        role="Strategic Security Architect",
+        goal="Develop a non-linear, stealthy pentest strategy focusing on high-value targets" # noqa: E501
+    )

@@ -1,6 +1,17 @@
-from app.agents.base import BaseAgent
+from crewai import Agent
+
+from app.agents.factory import get_llm_for_agent
+from app.core.config import settings
 
 
-class Reporter(BaseAgent):
-    async def compile_report(self, mission_data: str):
-        return await self.chat(f"Summarize this data into minified JSON: {mission_data}")
+def get_reporter_agent() -> Agent:
+    config = settings.MODEL_ASSIGNMENT["reporter"]
+
+    return Agent(
+        verbose=True,
+        allow_delegation=False,
+        backstory=config.system_prompt,
+        llm=get_llm_for_agent("reporter"),
+        role="Technical Documentation Lead",
+        goal="Synthesize complex scan data into executive summaries and structured JSON reports", # noqa: E501
+    )
