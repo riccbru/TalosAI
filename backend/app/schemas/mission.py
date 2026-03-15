@@ -16,4 +16,3 @@ class MissionResponse(BaseModel):
     status: str
     target: str
     data: Any
-
