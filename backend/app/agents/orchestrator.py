@@ -37,22 +37,43 @@ class Orchestrator:
         tester_task = Task(
             agent=self.tester,
             context=[scan_task],
-            description="Examine scan output. Use 'kali_terminal' to test for common vulnerabilities.", # noqa: E501
-            expected_output="A list of confirmed vulnerabilities with terminal evidence.", # noqa: E501
+            description=(
+                "You are now in the EXPLOITATION PHASE. Follow these steps exactly:\n"
+                "1. Read the Port/Service table from the Nmap output.\n"
+                "2. For EACH open port:\n" # noqa: E501
+                "   a. Use 'searchsploit' in the kali_terminal to find a specific exploit for that version.\n" # noqa: E501
+                "   b. Execute a verification command (e.g., 'nc -zv', 'smbclient -L', or 'msfconsole -x', and others).\n" # noqa: E501
+                "3. When you find a shell: execute 'whoami; hostname' as a proof of concept.\n" # noqa: E501
+                "4. Capture the RAW output for every attempt. If an exploit fails, state WHY based on the terminal logs.\n" # noqa: E501
+                "DO NOT skip any services. If you cannot exploit it, you must prove you at least scanned it." # noqa: E501
+            ),
+            expected_output="A step-by-step log of exploitation attempts for every discovered service, including raw command responses." # noqa: E501
         )
 
         critic_task = Task(
             agent=self.critic,
             context=[tester_task],
-            description="Verify the findings. Check for hallucinations in the exploit reports.", # noqa: E501
-            expected_output="A verified list of security flaws.",
+            description=(
+                "Audit the Tester's work. Compare the list of ports found by the Scanner " # noqa: E501
+                "against the exploits attempted by the Tester. \n"
+                "If the Tester missed ANY port (especially 1524 or 6667), send the task back " # noqa: E501
+                "or flag it as 'Incomplete Coverage'."
+            ),
+            expected_output="A coverage report confirming that all 20+ open ports were evaluated." # noqa: E501
         )
 
         report_task = Task(
             agent=self.reporter,
             context=[plan_task, scan_task, tester_task, critic_task],
-            description="Create a final JSON report including target, ports, and vulnerabilities.", # noqa: E501
-            expected_output="A raw JSON object containing the mission results without any markdown formatting.", # noqa: E501
+            description=(
+                "You are a strict technical reporter. You must ONLY report services and versions " # noqa: E501
+                "found in the RAW Nmap output. \n"
+                "STRICT RULES:\n"
+                "1. DO NOT mention serices that are NOT included in the nmap report.\n" # noqa: E501
+                "2. Include the exact port numbers found (21, 22, 23, 25, 80, 1524, etc.).\n" # noqa: E501
+                "3. Output MUST be valid JSON."
+    ),
+    expected_output="A JSON object mirroring the REAL technical data found in the terminal logs." # noqa: E501
         )
 
         return [plan_task, scan_task, tester_task, critic_task, report_task]
