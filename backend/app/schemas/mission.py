@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -15,4 +15,5 @@ class MissionRequest(BaseModel):
 class MissionResponse(BaseModel):
     status: str
     target: str
-    data: str
+    data: Any
+
