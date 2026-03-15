@@ -44,18 +44,16 @@ async def run_mission(request: MissionRequest) -> dict:
             )
         result = orchestrator.run()
 
-        if result.pydantic:
-            data = jsonable_encoder(result.pydantic)
-        else:
-            try:
-                data = json.loads(result.raw)
-            except json.JSONDecodeError:
-                data = result.raw
+        if "error" in result:
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content=get_mission_error(result["error"], request.target)
+            )
 
         return {
             "status": "completed",
             "target": request.target,
-            "data": data
+            "data": result
         }
 
     except Exception as e:
