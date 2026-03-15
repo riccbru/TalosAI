@@ -1,4 +1,5 @@
 from fastapi import APIRouter, status
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
 from app.agents.orchestrator import Orchestrator
@@ -36,10 +37,12 @@ async def run_mission(request: MissionRequest):
         orchestrator = Orchestrator(target=request.target)
         result = orchestrator.run()
 
+        clean_data = jsonable_encoder(result.pydantic) if result.pydantic else result.raw
+
         return {
             "status": "completed",
             "target": request.target,
-            "data": result.raw
+            "data": clean_data
         }
 
     except Exception as e:
