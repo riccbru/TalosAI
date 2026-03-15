@@ -29,6 +29,7 @@ services:
       - talos_network
     volumes:
       - ./backend/app:/app/app
+      - /var/run/docker.sock:/var/run/docker.sock
     container_name: talos_backend
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload --app-dir /app/app
     environment:
@@ -47,10 +48,30 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
+  
+  metasploitable:
+    image: tleemcjr/metasploitable2
+    container_name: talos_metasploitable
+    networks:
+      - talos_network
+    ports:
+      - "8081:80"      # Web Console (Mutillidae, DVWA)
+      - "2121:21"      # FTP
+      - "2222:22"      # SSH
+      - "2323:23"      # Telnet
+      - "4444:4444"    # Metasploit Default Listener
+      - "3306:3306"    # MySQL
+      - "5433:5432"    # PostgreSQL
+      - "8180:8180"    # Apache Tomcat
+    stdin_open: true
+    tty: true
+    command: >
+      sh -c "/bin/services.sh && bash"
 
 networks:
   talos_network:
     driver: bridge
+    name: talos_network
 
 volumes:
   postgres_data:

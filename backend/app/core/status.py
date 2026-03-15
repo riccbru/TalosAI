@@ -4,6 +4,7 @@ import subprocess
 import time
 from datetime import datetime, timezone
 
+import docker
 import psutil
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
@@ -15,8 +16,10 @@ def _utc_now():
     return datetime.now(timezone.utc).isoformat()
 
 
-def get_system_stats() -> dict:
+def get_system_status() -> dict:
     warnings = []
+    t0 = time.perf_counter()
+    latency_ms = round((time.perf_counter() - t0) * 1000, 3)
 
     cpu_percent = psutil.cpu_percent(interval=None)
     mem = psutil.virtual_memory()
@@ -56,6 +59,8 @@ def get_system_stats() -> dict:
         gpus = "unavailable"
 
     return {
+        "status": "degraded" if warnings else "up",
+        "latency_ms": latency_ms,
         "system": {
             "os": platform.system(),
             "os_release": platform.release(),
@@ -81,12 +86,11 @@ def get_system_stats() -> dict:
     }
 
 
-async def get_db_stats(db: AsyncSession, engine: AsyncEngine) -> dict:
-    t0 = time.perf_counter()
+async def get_db_status(db: AsyncSession, engine: AsyncEngine) -> dict:
     warnings = []
+    t0 = time.perf_counter()
 
     db_version = "Unknown"
-    latency_ms = 0.0
     pool_stats = {}
     connection_state = "disconnected"
 
@@ -113,8 +117,8 @@ async def get_db_stats(db: AsyncSession, engine: AsyncEngine) -> dict:
         warnings.append(f"connection_error: {str(e)}")
 
     return {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
         "status": "up",
+        "timestamp": _utc_now(),
         "connection": {
             "state": connection_state,
             "latency_ms": latency_ms,
@@ -125,7 +129,7 @@ async def get_db_stats(db: AsyncSession, engine: AsyncEngine) -> dict:
     }
 
 
-async def get_ollama_stats() -> dict:
+async def get_ollama_status() -> dict:
 
     try:
         t0 = time.perf_counter()
@@ -137,6 +141,7 @@ async def get_ollama_stats() -> dict:
 
         return {
             "status": "up",
+            "timestamp": _utc_now(),
             "latency_ms": latency_ms,
             "summary": {
                 "total_installed": len(models_library.models),
@@ -146,6 +151,48 @@ async def get_ollama_stats() -> dict:
             "library": models_library,
         }
 
+    except Exception as e:
+        return {"status": "down", "error": type(e).__name__, "message": str(e)}
+
+
+async def get_kali_status():
+    t0 = time.perf_counter()
+    try:
+        client = docker.from_env()
+        container = client.containers.get("talos_kali")
+        attrs = container.attrs
+        state = attrs.get('State', {})
+
+        networks = attrs.get('NetworkSettings', {}).get('Networks', {})
+        target_net = (
+            networks.get('talos_network') or
+            networks.get('talosai_talos_network') or
+            (list(networks.values())[0] if networks else {})
+        )
+        # high latency: 1800ms???
+        # stats = container.stats(stream=False)
+        # cpu_usage = stats['cpu_stats']['cpu_usage']['total_usage']
+        mem_limit = attrs['HostConfig']['Memory']
+
+        latency_ms = round((time.perf_counter() - t0) * 1000, 3)
+
+        return {
+            "status": "up" if state.get('Status') else "down",
+            "timestamp": _utc_now(),
+            "latency_ms": latency_ms,
+            "network": {
+                "gateway": target_net.get('Gateway'),
+                "ip_address": target_net.get('IPAddress'),
+                "internal_name": next(iter(networks.keys())) if networks else "none"
+            },
+            "resources": {
+                # "cpu_usage_percent": cpu_usage,
+                "memory_usage_mb": (
+                    round(mem_limit / (1024 ** 2), 2)
+                    if mem_limit > 0 else "unlimited"
+                )
+            },
+        }
     except Exception as e:
         return {"status": "down", "error": type(e).__name__, "message": str(e)}
 
