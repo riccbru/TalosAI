@@ -184,7 +184,7 @@ class Orchestrator:
             report_task,
         ]
 
-    def run(self):
+    def run(self) -> dict:
         tasks = self._create_tasks()
 
         talos_crew = Crew(
@@ -196,10 +196,10 @@ class Orchestrator:
                 self.planner,
                 self.scanner,
                 self.tester,
-                self.reporter,
+                self.summarizer,
                 self.critic,
                 self.reporter,
-            ],  # noqa: E501
+            ]
         )
 
         try:
@@ -212,4 +212,16 @@ class Orchestrator:
                 "raw": str(result),
             }
         except Exception as e:
-            return {"error": "pipeline_failed", "detail": str(e)}
+            return {
+                "error": "pipeline_failed",
+                "detail": str(e)
+            }
+
+    @staticmethod
+    def _extract_json(raw: str) -> dict:
+        import re
+        cleaned = re.sub(r"```json|```", "", raw).strip()
+        match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+        if match:
+            return json.loads(match.group())
+        raise ValueError(f"No valid JSON found in reporter output: {raw[:200]}")
