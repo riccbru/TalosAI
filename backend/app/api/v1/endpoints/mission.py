@@ -1,4 +1,8 @@
 import json
+
+import docker
+import xmltodict
+import nmap
 from fastapi import APIRouter, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
@@ -63,4 +67,21 @@ async def run_mission(request: MissionRequest) -> dict:
         return JSONResponse(
             status_code=status_code,
             content=error_body
+        )
+
+@router.get("/test")
+async def run_test() -> dict:
+    try:
+        client = docker.from_env()
+        kali = client.containers.get("talos_kali")
+        target_container = client.containers.get("talos_metasploitable")
+        target_ip = target_container.attrs['NetworkSettings']['Networks']['talos_network']['IPAddress']
+        cmd = f"nmap -oX - -n -Pn --top-ports 20 -sV -T4 {target_ip}"
+        exec_result = kali.exec_run(cmd)
+        data = xmltodict.parse(exec_result.output.decode())
+        return {"result": data}
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content=e
         )
