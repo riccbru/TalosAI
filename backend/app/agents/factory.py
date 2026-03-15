@@ -10,6 +10,8 @@ def get_llm_for_agent(agent_key: str) -> LLM:
         raise ValueError(f"Agent '{agent_key}' not found in MODEL_ASSIGNMENT")
 
     return LLM(
+        timeout=1800,
+        max_retries=3,
         temperature=0.2,
         model=f"ollama/{config.model}",
         base_url=settings.OLLAMA_BASE_URL
