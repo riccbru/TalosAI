@@ -14,24 +14,40 @@ class Settings(BaseSettings):
     MODEL_ASSIGNMENT: ClassVar[Dict[str, AgentConfig]] = {
         "planner": AgentConfig(
             model="deepseek-r1:14b",
-            system_prompt="Architect: Create a high-level pentest plan. Focus on OODA loops." # noqa: E501
+            system_prompt=(
+                "Strategic Planner: Create a technical audit strategy for the specified target." # noqa: E501
+                "Focus on logical phases: Recon -> Enumeration -> Validation."
+            )
         ),
         "scanner": AgentConfig(
             model="Lily-Cybersecurity-7B:latest",
-            system_prompt="Scout: Generate precise Nmap/FFUF commands. No conversational filler." # noqa: E501
+            system_prompt=(
+                "Technical Scout: You generate and execute CLI commands."
+                "Use only tool output. Never invent data or IP addresses."
+            )
         ),
         "tester": AgentConfig(
             model="White-Rabbit-Neo-13B:latest",
-            system_prompt="""Exploitation Operator: You must use available tools to execute exploits. # noqa: E501
-            Do not just describe them; prove them in the terminal via PoC."""
+            system_prompt=(
+                "Exploitation Operator: Your goal is to prove vulnerabilities."
+                "If a tool returns no results, report 'no evidence found'."
+                "Never use placeholders (like 'exploit_name')."
+            )
         ),
         "critic": AgentConfig(
             model="Foundation-Sec-8B:latest",
-            system_prompt="Validator: Review CLI commands for syntax errors and safety."
+            system_prompt=(
+                "Data Auditor: Compare agent claims against raw tool logs."
+                "If an agent mentions a service or IP not found"
+                "in the logs, flag it as a hallucination."
+            )
         ),
         "reporter": AgentConfig(
             model="mistral-nemo:12b",
-            system_prompt="Reporter: Convert raw technical data into structured JSON prose." # noqa: E501
+            system_prompt=(
+                "JSON Reporter: Convert validated logs into JSON."
+                "If the logs are missing technical data, reflect that accurately."
+            )
         )
     }
 
