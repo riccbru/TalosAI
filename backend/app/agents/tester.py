@@ -14,6 +14,6 @@ def get_tester_agent() -> Agent:
         allow_delegation=False,
         backstory=config.system_prompt,
         llm=get_llm_for_agent("tester"),
-        role="Exploitation Analyst",
-        goal="Identify vulnerabilities and CVEs based on reconnaissance data"
+        role="Exploitation Operator",
+        goal="Execute technical proof-of-concepts and exploits using the kali_terminal to prove vulnerability existence." # noqa: E501
     )
