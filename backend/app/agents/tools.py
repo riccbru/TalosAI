@@ -13,7 +13,7 @@ class KaliTerminalTool(BaseTool):
     name: str = "kali_terminal"
     description: str = """
     Run ANY command inside the Kali Linux container.
-    Use this for scanning, exploitation, using any security tool."""
+    Use this for scanning and exploitation, using any security tool."""
     args_schema: type[BaseModel] = TerminalInput
 
     def _run(self, command: str) -> str:
@@ -27,3 +27,5 @@ class KaliTerminalTool(BaseTool):
             return output if output else "Command executed successfully (no output)."
         except Exception as e:
             return f"Error executing command: {str(e)}"
+
+kali_tool = KaliTerminalTool()
