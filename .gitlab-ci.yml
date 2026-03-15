@@ -15,5 +15,3 @@ deploy_job:
     - echo "OLLAMA_BASE_URL=${OLLAMA_BASE_URL}" >> .env
     - docker compose down -v
     - docker compose -f docker-compose.prod.yml up -d --build
-    - docker network connect talos_network talos_kali || true
-    - docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' talos_kali
