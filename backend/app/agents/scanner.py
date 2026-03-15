@@ -9,12 +9,18 @@ def get_scanner_agent() -> Agent:
     config = settings.MODEL_ASSIGNMENT["scanner"]
 
     return Agent(
+        max_iter=5,
         verbose=True,
+        memory=False,
         tools=[kali_tool],
+        max_retry_limit=2,
         allow_delegation=False,
         backstory=config.system_prompt,
         llm=get_llm_for_agent("scanner"),
         role="Reconnaissance Specialist",
-        goal="""Translate strategic plans into precise, executable CLI commands
-        such as nmap, ffuf, gobuster, and any other enumerating Kali Linux tool"""
+        goal=(
+            "Execute precise CLI-based discovery and enumeration commands "
+            "and return raw tool output verbatim without interpretation, "
+            "summarization, or fabrication."
+        )
     )

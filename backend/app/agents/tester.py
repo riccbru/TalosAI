@@ -9,12 +9,19 @@ def get_tester_agent() -> Agent:
     config = settings.MODEL_ASSIGNMENT["tester"]
 
     return Agent(
+        max_iter=8,
         verbose=True,
+        memory=False,
         tools=[kali_tool],
+        max_retry_limit=2,
         allow_delegation=False,
         backstory=config.system_prompt,
         llm=get_llm_for_agent("tester"),
-        role="Penetration Tester",
-        goal="""Execute technical proof-of-concepts and exploits
-        using the kali_terminal to prove vulnerability existence and exploitability."""
+        role="Exploitation Operator",
+        goal=(
+            "Prove the existence of vulnerabilities through executed terminal "
+            "commands. Return a JSON array of structured evidence objects "
+            "for every port and service found in the scanner output. "
+            "Never fabricate data. Never use placeholders."
+        ),
     )

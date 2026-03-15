@@ -147,8 +147,8 @@ async def get_ollama_status() -> dict:
                 "total_installed": len(models_library.models),
                 "currently_active": len(active_models.models),
             },
-            "active_models": active_models,
-            "library": models_library,
+            "active_models": active_models.get("models", []),
+            "library": models_library.get("models", []),
         }
 
     except Exception as e:
