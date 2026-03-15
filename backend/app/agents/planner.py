@@ -14,5 +14,5 @@ def get_planner_agent() -> Agent:
         backstory=config.system_prompt,
         llm=get_llm_for_agent("planner"),
         role="Strategic Security Architect",
-        goal="Develop a non-linear, stealthy pentest strategy focusing on high-value targets" # noqa: E501
+        goal="Develop a non-linear, stealthy pentest strategy focusing on targets requested" # noqa: E501
     )

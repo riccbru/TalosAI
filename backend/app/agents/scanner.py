@@ -14,6 +14,7 @@ def get_scanner_agent() -> Agent:
         allow_delegation=False,
         backstory=config.system_prompt,
         llm=get_llm_for_agent("scanner"),
-        role="Technical Reconnaissance Specialist",
-        goal="Translate strategic plans into precise, executable CLI commands (Nmap, FFUF, Gobuster, etc.)" # noqa: E501
+        role="Reconnaissance Specialist",
+        goal="""Translate strategic plans into precise, executable CLI commands
+        such as nmap, ffuf, gobuster, and any other enumerating Kali Linux tool"""
     )

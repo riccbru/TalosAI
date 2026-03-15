@@ -23,14 +23,18 @@ class Orchestrator:
     def _create_tasks(self):
         plan_task = Task(
             agent=self.planner,
-            description=f"Target: {self.target}\nInstructions: {self.user_prompt}\nCreate a pentest strategy.", # noqa: E501
+            description=f"""Instructions: {self.user_prompt}\nTarget: {self.target}\n
+            Develop a multi-stage exploitation strategy.""", # noqa: E501
             expected_output="A prioritized list of scanning objectives.",
         )
 
         scan_task = Task(
             agent=self.scanner,
             context=[plan_task],
-            description=f"Scan {self.target} using 'kali_terminal'. Run nmap -sV to find services.", # noqa: E501
+            description=
+                f"""Scan ONLY {self.target} using 'kali_terminal'.
+                Use nmap or any other Kali Linux reconnaissance tool of your
+                choice to find available services and their exact version.""",
             expected_output="The raw terminal output from the Nmap scan.",
         )
 
@@ -38,11 +42,11 @@ class Orchestrator:
             agent=self.tester,
             context=[scan_task],
             description=(
-                "You are now in the EXPLOITATION PHASE. Follow these steps exactly:\n"
+                "EXPLOITATION PHASE, follow these steps exactly:\n"
                 "1. Read the Port/Service table from the Nmap output.\n"
                 "2. For EACH open port:\n" # noqa: E501
                 "   a. Use 'searchsploit' in the kali_terminal to find a specific exploit for that version.\n" # noqa: E501
-                "   b. Execute a verification command (e.g., 'nc -zv', 'smbclient -L', or 'msfconsole -x', and others).\n" # noqa: E501
+                "   b. Execute a verification command.\n" # noqa: E501
                 "3. When you find a shell: execute 'whoami; hostname' as a proof of concept.\n" # noqa: E501
                 "4. Capture the RAW output for every attempt. If an exploit fails, state WHY based on the terminal logs.\n" # noqa: E501
                 "DO NOT skip any services. If you cannot exploit it, you must prove you at least scanned it." # noqa: E501
@@ -52,28 +56,27 @@ class Orchestrator:
 
         critic_task = Task(
             agent=self.critic,
-            context=[tester_task],
+            context=[scan_task, tester_task],
             description=(
-                "Audit the Tester's work. Compare the list of ports found by the Scanner " # noqa: E501
-                "against the exploits attempted by the Tester. \n"
-                "If the Tester missed ANY port (especially 1524 or 6667), send the task back " # noqa: E501
-                "or flag it as 'Incomplete Coverage'."
+                f"CRITICAL AUDIT: You are validating a scan for ONLY {self.target}.\n"
+                f"1. Check if the IP address in the logs is EXACTLY {self.target}.\n"
+                f"2. If you see any other target instead of {self.target}, REJECT THE DATA immediately.\n" # noqa: E501
+                "3. Your final answer must only contain what is FACTUALLY present in the tool outputs." # noqa: E501
             ),
-            expected_output="A coverage report confirming that all 20+ open ports were evaluated." # noqa: E501
+            expected_output=f"A validation report confirming the results for {self.target}." # noqa: E501
         )
 
         report_task = Task(
             agent=self.reporter,
             context=[plan_task, scan_task, tester_task, critic_task],
             description=(
-                "You are a strict technical reporter. You must ONLY report services and versions " # noqa: E501
-                "found in the RAW Nmap output. \n"
-                "STRICT RULES:\n"
-                "1. DO NOT mention serices that are NOT included in the nmap report.\n" # noqa: E501
-                "2. Include the exact port numbers found (21, 22, 23, 25, 80, 1524, etc.).\n" # noqa: E501
+                "Generate a JSON report. DO NOT hallucinate services." # noqa: E501
+                "Use ONLY the data found in the Scanner and Tester terminal logs."
+                "1. DO NOT mention services that are NOT included in the nmap report.\n" # noqa: E501
+                "2. Include the exact port numbers found.\n" # noqa: E501
                 "3. Output MUST be valid JSON."
-    ),
-    expected_output="A JSON object mirroring the REAL technical data found in the terminal logs." # noqa: E501
+            ),
+            expected_output="A JSON object mirroring the REAL technical data found in the terminal logs." # noqa: E501
         )
 
         return [plan_task, scan_task, tester_task, critic_task, report_task]
