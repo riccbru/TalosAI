@@ -9,11 +9,11 @@ def get_tester_agent() -> Agent:
     config = settings.MODEL_ASSIGNMENT["tester"]
 
     return Agent(
-        max_iter=8,
+        max_iter=10,
         verbose=True,
         memory=False,
         tools=[kali_tool],
-        max_retry_limit=2,
+        max_retry_limit=3,
         allow_delegation=False,
         backstory=config.system_prompt,
         llm=get_llm_for_agent("tester"),

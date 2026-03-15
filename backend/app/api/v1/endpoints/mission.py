@@ -38,7 +38,10 @@ def get_mission_error(e: Exception, target: str) -> dict:
 @router.post("/run")
 async def run_mission(request: MissionRequest) -> dict:
     try:
-        orchestrator = Orchestrator(target=request.target)
+        orchestrator = Orchestrator(
+            target=request.target,
+            user_prompt=request.prompt
+            )
         result = orchestrator.run()
 
         if result.pydantic:

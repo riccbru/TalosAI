@@ -9,8 +9,8 @@ def get_planner_agent() -> Agent:
 
     return Agent(
         max_iter=3,
-        memory=False,
         verbose=True,
+        memory=False,
         max_retry_limit=2,
         allow_delegation=False,
         backstory=config.system_prompt,
