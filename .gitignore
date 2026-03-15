@@ -25,3 +25,4 @@ backend/app/db/init/*.sql
 .DS_Store
 /img/
 DEV.md
+LOG.md

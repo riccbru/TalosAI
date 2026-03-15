@@ -22,7 +22,7 @@ class Settings(BaseSettings):
         ),
         "tester": AgentConfig(
             model="White-Rabbit-Neo-13B:latest",
-            system_prompt="Infiltrator: Analyze services for exploitation vectors and CVEs." # noqa: E501
+            system_prompt="Exploitation Operator: You must use available tools to execute exploits. Do not just describe them; prove them in the terminal." # noqa: E501
         ),
         "critic": AgentConfig(
             model="Foundation-Sec-8B:latest",
