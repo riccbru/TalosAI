@@ -13,5 +13,5 @@ def get_reporter_agent() -> Agent:
         backstory=config.system_prompt,
         llm=get_llm_for_agent("reporter"),
         role="Technical Documentation Lead",
-        goal="Synthesize complex scan data into executive summaries and structured JSON reports", # noqa: E501
+        goal="Synthesize complex data into executive summaries and structured JSON reports" # noqa: E501
     )

@@ -22,7 +22,8 @@ class Settings(BaseSettings):
         ),
         "tester": AgentConfig(
             model="White-Rabbit-Neo-13B:latest",
-            system_prompt="Exploitation Operator: You must use available tools to execute exploits. Do not just describe them; prove them in the terminal." # noqa: E501
+            system_prompt="""Exploitation Operator: You must use available tools to execute exploits. # noqa: E501
+            Do not just describe them; prove them in the terminal via PoC."""
         ),
         "critic": AgentConfig(
             model="Foundation-Sec-8B:latest",
@@ -30,7 +31,7 @@ class Settings(BaseSettings):
         ),
         "reporter": AgentConfig(
             model="mistral-nemo:12b",
-            system_prompt="Chronicler: Convert raw technical data into structured JSON/PDF prose." # noqa: E501
+            system_prompt="Reporter: Convert raw technical data into structured JSON prose." # noqa: E501
         )
     }
 
