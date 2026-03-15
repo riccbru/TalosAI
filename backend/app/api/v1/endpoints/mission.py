@@ -2,7 +2,6 @@ import json
 
 import docker
 import xmltodict
-import nmap
 from fastapi import APIRouter, status
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
@@ -69,13 +68,13 @@ async def run_mission(request: MissionRequest) -> dict:
             content=error_body
         )
 
-@router.get("/test")
+@router.get("/test/metasploitable")
 async def run_test() -> dict:
     try:
         client = docker.from_env()
         kali = client.containers.get("talos_kali")
         target_container = client.containers.get("talos_metasploitable")
-        target_ip = target_container.attrs['NetworkSettings']['Networks']['talos_network']['IPAddress']
+        target_ip = target_container.attrs['NetworkSettings']['Networks']['talos_network']['IPAddress'] # noqa: E501
         cmd = f"nmap -oX - -n -Pn --top-ports 20 -sV -T4 {target_ip}"
         exec_result = kali.exec_run(cmd)
         data = xmltodict.parse(exec_result.output.decode())
