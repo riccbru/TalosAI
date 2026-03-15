@@ -1,7 +1,7 @@
 from crewai import Agent
-from tools import KaliTerminalTool as kali_tools
 
 from app.agents.factory import get_llm_for_agent
+from app.agents.tools import KaliTerminalTool as kali_tool
 from app.core.config import settings
 
 
@@ -10,7 +10,7 @@ def get_tester_agent() -> Agent:
 
     return Agent(
         verbose=True,
-        tools=[kali_tools],
+        tools=[kali_tool],
         allow_delegation=False,
         backstory=config.system_prompt,
         llm=get_llm_for_agent("tester"),
