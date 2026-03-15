@@ -9,6 +9,7 @@ from app.agents.reporter import get_reporter_agent
 from app.agents.scanner import get_scanner_agent
 from app.agents.summarizer import get_summarizer_agent
 from app.agents.tester import get_tester_agent
+from app.core.status import _utc_now
 
 
 class Orchestrator:
@@ -42,7 +43,7 @@ class Orchestrator:
             expected_output=(
                 "A valid JSON object with target and phases array, "
                 "each phase containing name, objectives and suggested_tools."
-            ),
+            )
         )
 
         scan_task = Task(
@@ -64,7 +65,7 @@ class Orchestrator:
             expected_output=(
                 "Raw nmap terminal output (containing open ports, services and versions,"  # noqa: E501
                 "and any additional enumeration tools, prefixed with the command that was executed."  # noqa: E501
-            ),
+            )
         )
 
         tester_task = Task(
@@ -95,7 +96,7 @@ class Orchestrator:
                 "A JSON array of exploitation attempt objects, each containing "
                 "port, service, version, searchsploit_output, verification_command, "
                 "raw_output, and confirmed fields."
-            ),
+            )
         )
 
         summarize_task = Task(
@@ -103,26 +104,23 @@ class Orchestrator:
             context=[scan_task, tester_task],
             description=(
                 "You have been provided with raw scanner and tester output in your context.\n" # noqa: E501
-                "DO NOT use your own knowledge. ONLY extract data from the provided context.\n\n" # noqa: E501
-                "From the SCANNER context, extract every line containing 'open' and parse:\n" # noqa: E501
-                "- port number\n"
-                "- service name\n"
-                "- version string\n\n"
-                "From the TESTER context, extract:\n"
-                "- which commands were actually executed\n"
-                "- what the actual terminal output was\n"
-                "- whether exploitation was confirmed\n\n"
-                "OUTPUT FORMAT: Valid JSON only with open_ports[] and exploitation_attempts[].\n\n" # noqa: E501
-                "CONSTRAINTS:\n"
-                "- If you cannot find data in the context, set the field to null.\n"
-                "- Never invent services, versions, or IPs not present in the context.\n" # noqa: E501
-                "- The target IP must match exactly what appears in the scanner output.\n" # noqa: E501
-                "- Max 500 words. No markdown. No prose. No code fences."
+                "DO NOT use your own knowledge under any circumstances.\n"
+                "DO NOT invent services, ports, versions, or operating systems.\n\n"
+                "STEP 1 — Read the scanner context carefully.\n"
+                "STEP 2 — Extract ONLY lines containing the word 'open'.\n"
+                "STEP 3 — For each line, parse the port number, service name, and version.\n" # noqa: E501
+                "STEP 4 — Read the tester context and extract only commands that were actually executed.\n\n" # noqa: E501
+                "If a port does not appear in the scanner context, it MUST NOT appear in your output.\n" # noqa: E501
+                "If a service version does not appear in the scanner context, do not include it.\n\n" # noqa: E501
+                "The target is a Linux machine. If you find yourself writing Windows services " # noqa: E501
+                "(msrpc, microsoft-ds, ms-wbt-server), STOP — you are hallucinating.\n\n" # noqa: E501
+                "OUTPUT FORMAT: Valid JSON only with open_ports[] and exploitation_attempts[].\n" # noqa: E501
+                "No markdown. No prose. No code fences."
             ),
             expected_output=(
-                "A compact JSON object derived exclusively from the provided context, "
-                "with open_ports[] and exploitation_attempts[] arrays."
-            ),
+                "A compact JSON object derived exclusively from the provided scanner context, " # noqa: E501
+                "with open_ports[] containing only ports that appear in the nmap output." # noqa: E501
+            )
         )
 
         critic_task = Task(
@@ -147,7 +145,7 @@ class Orchestrator:
             expected_output=(
                 "A JSON audit report with validated_findings, rejected_findings, "
                 "hallucination_flags, and overall_confidence_score."
-            ),
+            )
         )
 
         report_task = Task(
@@ -157,7 +155,7 @@ class Orchestrator:
                 "Generate the final penetration test report from the validated data.\n\n"  # noqa: E501
                 "OUTPUT FORMAT: Return a single valid JSON object with these exact keys:\n"  # noqa: E501
                 "- target: string\n"
-                "- scan_date: ISO 8601 timestamp\n"
+                f"- use this exact value for scan_date: {_utc_now()}\n"
                 "- executive_summary: string, max 3 sentences\n"
                 "- findings: array of validated findings from critic output\n"
                 "- rejected_findings: array from critic output\n"
@@ -172,7 +170,7 @@ class Orchestrator:
             expected_output=(
                 "A single valid JSON object with target, scan_date, executive_summary, "
                 "findings, rejected_findings, recommendations, and confidence_score."
-            ),
+            )
         )
 
         return [

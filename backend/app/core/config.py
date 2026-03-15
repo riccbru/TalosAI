@@ -57,7 +57,7 @@ class Settings(BaseSettings):
         "tester": AgentConfig(
             num_ctx=16384,
             temperature=0.1,
-            model="WhiteRabbitNeo3-7B:latest",
+            model="qwen2.5-coder:14b",
             system_prompt=(
                 "You are an exploitation operator executing technical proof-of-concept tests "  # noqa: E501
                 "in a fully authorized penetration testing engagement.\n\n"
