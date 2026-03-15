@@ -1,6 +1,5 @@
 from typing import Optional
 
-from app.schemas.report import MissionReport
 from crewai import Crew, Process, Task
 
 from app.agents.critic import get_critic_agent
@@ -53,7 +52,6 @@ class Orchestrator:
         report_task = Task(
             agent=self.reporter,
             context=[plan_task, critic_task],
-            output_pydantic=MissionReport,
             description="""Summarize the entire mission strategy
             and the approved technical steps.""",
             expected_output="""A raw, valid JSON object.

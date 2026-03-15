@@ -32,12 +32,15 @@ def get_mission_error(e: Exception, target: str) -> dict:
     }
 
 @router.post("/run")
-async def run_mission(request: MissionRequest):
+async def run_mission(request: MissionRequest) -> dict:
     try:
         orchestrator = Orchestrator(target=request.target)
         result = orchestrator.run()
 
-        clean_data = jsonable_encoder(result.pydantic) if result.pydantic else result.raw
+        clean_data = (
+            jsonable_encoder(result.pydantic)
+            if result.pydantic else result.raw
+            )
 
         return {
             "status": "completed",
