@@ -1,7 +1,7 @@
 from crewai import Agent
 
 from app.agents.factory import get_llm_for_agent
-from app.agents.tools import KaliTerminalTool as kali_tool
+from app.agents.tools import kali_tool
 from app.core.config import settings
 
 
