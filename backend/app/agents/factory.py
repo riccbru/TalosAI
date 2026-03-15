@@ -12,7 +12,8 @@ def get_llm_for_agent(agent_key: str) -> LLM:
     return LLM(
         timeout=1800,
         max_retries=3,
-        temperature=0.2,
+        num_ctx=config.num_ctx,
+        temperature=config.temperature,
         model=f"ollama/{config.model}",
         base_url=settings.OLLAMA_BASE_URL
     )
