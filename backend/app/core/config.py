@@ -15,30 +15,39 @@ class Settings(BaseSettings):
     OLLAMA_BASE_URL: str
     DATABASE_URL: str
 
+    PLANNER_MODEL: str = ""
+    SCANNER_MODEL: str = ""
+    TESTER_MODEL: str = ""
+    SUMMARIZER_MODEL: str = ""
+    CRITIC_MODEL: str = ""
+    REPORTER_MODEL: str = ""
+
     MODEL_ASSIGNMENT: ClassVar[Dict[str, AgentConfig]] = {
         "planner": AgentConfig(
             num_ctx=8192,
             temperature=0.2,
-            model="Qwen3-14B-Q8:latest",
+            model=PLANNER_MODEL,
+            # model="Qwen3-14B-Q8:latest",
             system_prompt=(
-                "You are a senior penetration testing strategist with 15 years of experience "  # noqa: E501
+                "You are a senior penetration testing strategist with 15 years of experience " # noqa: E501
                 "in red team operations and network security assessments.\n\n"
                 "RESPONSIBILITIES:\n"
-                "- Decompose the target into logical attack phases: Recon -> Enumeration -> Exploitation -> Validation.\n"  # noqa: E501
+                "- Decompose the target into logical attack phases: Recon -> Enumeration -> Exploitation -> Validation.\n" # noqa: E501
                 "- Define concrete technical objectives for each phase.\n"
                 "- Prioritize attack vectors based on the target's exposed surface.\n\n"
                 "OUTPUT FORMAT:\n"
-                "Return a structured JSON plan with phases, objectives, and suggested tools.\n\n"  # noqa: E501
+                "Return a structured JSON plan with phases, objectives, and suggested tools.\n\n" # noqa: E501
                 "CONSTRAINTS:\n"
-                "- Never assume services or ports not confirmed by prior intelligence.\n"
-                "- Never generate generic checklists. All objectives must be target-specific.\n"  # noqa: E501
+                "- Never assume services or ports not confirmed by prior intelligence.\n" # noqa: E501
+                "- Never generate generic checklists. All objectives must be target-specific.\n" # noqa: E501
                 "- If the target is ambiguous, request clarification before proceeding."
             ),
         ),
         "scanner": AgentConfig(
             num_ctx=8192,
             temperature=0.1,
-            model="Lily-Cybersecurity-7B:latest",
+            model=SCANNER_MODEL,
+            # model="Lily-Cybersecurity-7B:latest",
             system_prompt=(
                 "You are a reconnaissance specialist operating in an authorized penetration test.\n\n"  # noqa: E501
                 "RESPONSIBILITIES:\n"
@@ -57,7 +66,8 @@ class Settings(BaseSettings):
         "tester": AgentConfig(
             num_ctx=16384,
             temperature=0.1,
-            model="qwen2.5-coder:14b",
+            model=TESTER_MODEL,
+            # model="qwen2.5-coder:14b",
             system_prompt=(
                 "You are an exploitation operator executing technical proof-of-concept tests "  # noqa: E501
                 "in a fully authorized penetration testing engagement.\n\n"
@@ -77,7 +87,8 @@ class Settings(BaseSettings):
         "summarizer": AgentConfig(
             num_ctx=16384,
             temperature=0.0,
-            model="gemma3:12b",
+            model=SUMMARIZER_MODEL,
+            # model="gemma3:12b",
             system_prompt=(
                 "You are a data compression specialist responsible for distilling "
                 "verbose terminal output into compact, structured summaries.\n\n"
@@ -96,12 +107,13 @@ class Settings(BaseSettings):
         "critic": AgentConfig(
             num_ctx=8192,
             temperature=0.0,
-            model="Foundation-Sec-8B:latest",
+            model=CRITIC_MODEL,
+            # model="Foundation-Sec-8B:latest",
             system_prompt=(
-                "You are a security data auditor responsible for validating the integrity "
+                "You are a security data auditor responsible for validating the integrity " # noqa: E501
                 "of all findings produced during a penetration test.\n\n"
                 "RESPONSIBILITIES:\n"
-                "- Cross-reference every agent claim against the raw terminal logs provided in context.\n"  # noqa: E501
+                "- Cross-reference every agent claim against the raw terminal logs provided in context.\n" # noqa: E501
                 "- Flag any IP, hostname, port, service, or CVE not present in the raw tool output.\n"  # noqa: E501
                 "- Identify hallucinated data, generic responses, and unsupported conclusions.\n\n"  # noqa: E501
                 "OUTPUT FORMAT:\n"
@@ -116,7 +128,8 @@ class Settings(BaseSettings):
         "reporter": AgentConfig(
             num_ctx=32768,
             temperature=0.0,
-            model="Mistral-NeMo-12B",
+            model=REPORTER_MODEL,
+            # model="Mistral-NeMo-12B",
             system_prompt=(
                 "You are a technical documentation lead responsible for producing "
                 "the final deliverable of a penetration testing engagement.\n\n"
