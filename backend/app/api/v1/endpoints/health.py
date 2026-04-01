@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.status import (
     get_db_status,
     get_kali_status,
+    get_metapsloitable_status,
     get_ollama_status,
     get_service_error,
     get_system_status,
@@ -44,6 +45,15 @@ async def ollama_health():
 async def kali_health():
     try:
         status = await get_kali_status()
+        return status
+    except Exception as e:
+        body = get_service_error(e)
+        return JSONResponse(status_code=503, content=body)
+
+@router.get("/metasploitable")
+async def metasploitable_health():
+    try:
+        status = await get_metapsloitable_status()
         return status
     except Exception as e:
         body = get_service_error(e)

@@ -12,13 +12,16 @@ deploy_job:
     - echo "POSTGRES_USER=${POSTGRES_USER}" >> .env
     - echo "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}" >> .env
     - echo "DATABASE_URL=${DATABASE_URL}" >> .env
+
     - echo "OLLAMA_BASE_URL=${OLLAMA_BASE_URL}" >> .env
+
+    - echo "CREWAI_TRACING_ENABLED=${CREWAI_TRACING_ENABLED}" >> .env
     - echo "PLANNER_MODEL=${PLANNER_MODEL}" >> .env
     - echo "SCANNER_MODEL=${SCANNER_MODEL}" >> .env
     - echo "TESTER_MODEL=${TESTER_MODEL}" >> .env
     - echo "SUMMARIZER_MODEL=${SUMMARIZER_MODEL}" >> .env
     - echo "CRITIC_MODEL=${CRITIC_MODEL}" >> .env
     - echo "REPORTER_MODEL=${REPORTER_MODEL}" >> .env
-    - cat .env
+
     - docker compose down -v
     - docker compose -f docker-compose.prod.yml up -d --build
