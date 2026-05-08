@@ -7,7 +7,7 @@ dependency_audit:
   only:
     - main
   tags:
-    - talosai-audit
+    - talosai-deploy
   image: python:3.13-slim
   script:
     - cd backend
