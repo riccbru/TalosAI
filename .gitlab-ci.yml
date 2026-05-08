@@ -1,5 +1,25 @@
 stages:
+  - audit
   - deploy
+
+dependency_audit:
+  stage: audit
+  only:
+    - main
+  tags:
+    - talosai-audit
+  image: python:3.13-slim
+  script:
+    - cd backend
+    - pip install poetry pip-audit deptry bandit
+    - poetry config virtualenvs.create false
+    - poetry install --no-interaction --no-ansi
+    # Check vulnerabilities in installed packages
+    - pip-audit --local
+    # Check dependencies not used
+    - deptry .
+    # Check vulnerabilities in source code
+    - bandit -r app/ -ll
 
 deploy_job:
   stage: deploy
@@ -8,20 +28,20 @@ deploy_job:
   only:
     - main
   script:
-    - echo "POSTGRES_DB=${POSTGRES_DB}" > .env
-    - echo "POSTGRES_USER=${POSTGRES_USER}" >> .env
-    - echo "POSTGRES_PASSWORD=${POSTGRES_PASSWORD}" >> .env
-    - echo "DATABASE_URL=${DATABASE_URL}" >> .env
-
-    - echo "OLLAMA_BASE_URL=${OLLAMA_BASE_URL}" >> .env
-
-    - echo "CREWAI_TRACING_ENABLED=${CREWAI_TRACING_ENABLED}" >> .env
-    - echo "PLANNER_MODEL=${PLANNER_MODEL}" >> .env
-    - echo "SCANNER_MODEL=${SCANNER_MODEL}" >> .env
-    - echo "TESTER_MODEL=${TESTER_MODEL}" >> .env
-    - echo "SUMMARIZER_MODEL=${SUMMARIZER_MODEL}" >> .env
-    - echo "CRITIC_MODEL=${CRITIC_MODEL}" >> .env
-    - echo "REPORTER_MODEL=${REPORTER_MODEL}" >> .env
-
-    - docker compose down -v
+    - |
+      cat > .env <<EOF
+      POSTGRES_DB=${POSTGRES_DB}
+      POSTGRES_USER=${POSTGRES_USER}
+      POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      DATABASE_URL=${DATABASE_URL}
+      OLLAMA_BASE_URL=${OLLAMA_BASE_URL}
+      CREWAI_TRACING_ENABLED=${CREWAI_TRACING_ENABLED}
+      PLANNER_MODEL=${PLANNER_MODEL}
+      SCANNER_MODEL=${SCANNER_MODEL}
+      TESTER_MODEL=${TESTER_MODEL}
+      SUMMARIZER_MODEL=${SUMMARIZER_MODEL}
+      CRITIC_MODEL=${CRITIC_MODEL}
+      REPORTER_MODEL=${REPORTER_MODEL}
+      EOF
+    - docker compose down
     - docker compose -f docker-compose.prod.yml up -d --build
