@@ -8,7 +8,7 @@ RUN pip install poetry && poetry config virtualenvs.create false
 # Copia dei file di configurazione
 COPY pyproject.toml poetry.lock* ./
 # Installazione dipendenze (Usa 'sync' per Poetry 2.0)
-RUN poetry sync --no-interaction --no-ansi
+RUN poetry install --no-interaction --no-ansi
 
 COPY . .
 ENV PYTHONPATH=/app
