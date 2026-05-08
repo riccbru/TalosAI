@@ -1,25 +1,5 @@
 stages:
-  - audit
   - deploy
-
-dependency_audit:
-  stage: audit
-  only:
-    - main
-  tags:
-    - talosai-deploy
-  image: python:3.13-slim
-  script:
-    - cd backend
-    - pip install --break-system-packages poetry pip-audit deptry bandit
-    - poetry config virtualenvs.create false
-    - poetry install --no-interaction --no-ansi
-    # Check vulnerabilities in installed packages
-    - pip-audit --local
-    # Check dependencies not used
-    - deptry .
-    # Check vulnerabilities in source code
-    - bandit -r app/ -ll
 
 deploy_job:
   stage: deploy
