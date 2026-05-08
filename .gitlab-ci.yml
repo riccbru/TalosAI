@@ -11,7 +11,7 @@ dependency_audit:
   image: python:3.13-slim
   script:
     - cd backend
-    - pip install poetry pip-audit deptry bandit
+    - pip install --break-system-packages poetry pip-audit deptry bandit
     - poetry config virtualenvs.create false
     - poetry install --no-interaction --no-ansi
     # Check vulnerabilities in installed packages
