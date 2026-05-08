@@ -9,7 +9,7 @@ app = FastAPI(
     title="TalosAI API",
     redirect_slashes=False,
     docs_url="/talos/docs",
-    redoc_url="/talos/docs",
+    redoc_url="/talos/redoc",
     description="AI-powered Penetration Testing Agent",
 )
 
