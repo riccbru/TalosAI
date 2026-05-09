@@ -8,6 +8,11 @@ target-version = "py314"
 ignore = []
 select = ["F", "E", "W", "I"]
 
+[tool.ruff.lint.isort]
+combine-as-imports = true
+lines-after-imports = 2
+known-first-party = ["app"]
+
 [tool.ruff.format]
 # Use double quotes (standard Black style)
 line-ending = "auto"

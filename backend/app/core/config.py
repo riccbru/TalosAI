@@ -1,4 +1,4 @@
-from typing import ClassVar, Dict
+from typing import Dict
 
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -12,8 +12,16 @@ class AgentConfig(BaseModel):
 
 
 class Settings(BaseSettings):
-    OLLAMA_BASE_URL: str
     DATABASE_URL: str
+
+    DEV: bool
+    OLLAMA_BASE_URL: str
+
+    JWT_ALG: str
+    ACCESS_TOKEN_SECRET: str
+    REFRESH_TOKEN_SECRET: str
+    ACCESS_TOKEN_EXPIRE_MINUTES: int
+    REFRESH_TOKEN_EXPIRE_DAYS: int
 
     PLANNER_MODEL: str
     SCANNER_MODEL: str
@@ -31,18 +39,18 @@ class Settings(BaseSettings):
                 model=self.PLANNER_MODEL,
                 # model="Qwen3-14B-Q8:latest",
                 system_prompt=(
-                    "You are a senior penetration testing strategist with 15 years of experience " # noqa: E501
+                    "You are a senior penetration testing strategist with 15 years of experience "  # noqa: E501
                     "in red team operations and network security assessments.\n\n"
                     "RESPONSIBILITIES:\n"
-                    "- Decompose the target into logical attack phases: Recon -> Enumeration -> Exploitation -> Validation.\n" # noqa: E501
+                    "- Decompose the target into logical attack phases: Recon -> Enumeration -> Exploitation -> Validation.\n"  # noqa: E501
                     "- Define concrete technical objectives for each phase.\n"
-                    "- Prioritize attack vectors based on the target's exposed surface.\n\n"
+                    "- Prioritize attack vectors based on the target's exposed surface.\n\n"  # noqa: E501
                     "OUTPUT FORMAT:\n"
-                    "Return a structured JSON plan with phases, objectives, and suggested tools.\n\n" # noqa: E501
+                    "Return a structured JSON plan with phases, objectives, and suggested tools.\n\n"  # noqa: E501
                     "CONSTRAINTS:\n"
-                    "- Never assume services or ports not confirmed by prior intelligence.\n" # noqa: E501
-                    "- Never generate generic checklists. All objectives must be target-specific.\n" # noqa: E501
-                    "- If the target is ambiguous, request clarification before proceeding."
+                    "- Never assume services or ports not confirmed by prior intelligence.\n"  # noqa: E501
+                    "- Never generate generic checklists. All objectives must be target-specific.\n"  # noqa: E501
+                    "- If the target is ambiguous, request clarification before proceeding."  # noqa: E501
                 ),
             ),
             "scanner": AgentConfig(
@@ -55,7 +63,7 @@ class Settings(BaseSettings):
                     "RESPONSIBILITIES:\n"
                     "- Translate strategic objectives into precise, executable Kali Linux CLI commands.\n"  # noqa: E501
                     "- Execute commands via the kali_terminal tool and return raw output only.\n"  # noqa: E501
-                    "- Perform service discovery, version detection, and enumeration.\n\n"
+                    "- Perform service discovery, version detection, and enumeration.\n\n"  # noqa: E501
                     "OUTPUT FORMAT:\n"
                     "Return the raw terminal output verbatim. Do not summarize or interpret results.\n\n"  # noqa: E501
                     "CONSTRAINTS:\n"
@@ -74,7 +82,7 @@ class Settings(BaseSettings):
                     "You are an exploitation operator executing technical proof-of-concept tests "  # noqa: E501
                     "in a fully authorized penetration testing engagement.\n\n"
                     "RESPONSIBILITIES:\n"
-                    "- Analyze scanner output and identify exploitable vulnerabilities.\n"
+                    "- Analyze scanner output and identify exploitable vulnerabilities.\n"  # noqa: E501
                     "- Execute verification commands via kali_terminal to prove vulnerability existence.\n"  # noqa: E501
                     "- For every open port found, attempt service-specific enumeration and exploitation.\n\n"  # noqa: E501
                     "OUTPUT FORMAT:\n"
@@ -95,8 +103,8 @@ class Settings(BaseSettings):
                     "You are a data compression specialist responsible for distilling "
                     "verbose terminal output into compact, structured summaries.\n\n"
                     "RESPONSIBILITIES:\n"
-                    "- Extract only factual, evidence-backed data from raw tool output.\n"
-                    "- Discard noise, formatting artifacts, and redundant information.\n"
+                    "- Extract only factual, evidence-backed data from raw tool output.\n"  # noqa: E501
+                    "- Discard noise, formatting artifacts, and redundant information.\n"  # noqa: E501
                     "- Preserve all technically significant findings.\n\n"
                     "OUTPUT FORMAT:\n"
                     "Return a compact valid JSON object only.\n\n"
@@ -112,10 +120,10 @@ class Settings(BaseSettings):
                 model=self.CRITIC_MODEL,
                 # model="Foundation-Sec-8B:latest",
                 system_prompt=(
-                    "You are a security data auditor responsible for validating the integrity " # noqa: E501
+                    "You are a security data auditor responsible for validating the integrity "  # noqa: E501
                     "of all findings produced during a penetration test.\n\n"
                     "RESPONSIBILITIES:\n"
-                    "- Cross-reference every agent claim against the raw terminal logs provided in context.\n" # noqa: E501
+                    "- Cross-reference every agent claim against the raw terminal logs provided in context.\n"  # noqa: E501
                     "- Flag any IP, hostname, port, service, or CVE not present in the raw tool output.\n"  # noqa: E501
                     "- Identify hallucinated data, generic responses, and unsupported conclusions.\n\n"  # noqa: E501
                     "OUTPUT FORMAT:\n"
@@ -138,9 +146,9 @@ class Settings(BaseSettings):
                     "RESPONSIBILITIES:\n"
                     "- Transform validated terminal logs and audit results into a structured JSON report.\n"  # noqa: E501
                     "- Accurately reflect the scope, findings, evidence, and confidence of each result.\n"  # noqa: E501
-                    "- Include an executive summary and a technical findings section.\n\n"
+                    "- Include an executive summary and a technical findings section.\n\n"  # noqa: E501
                     "OUTPUT FORMAT:\n"
-                    "Return a single valid JSON object with the following top-level keys: "
+                    "Return a single valid JSON object with the following top-level keys: "  # noqa: E501
                     "executive_summary, target, scan_date, findings[], recommendations[], confidence_score.\n\n"  # noqa: E501
                     "CONSTRAINTS:\n"
                     "- Mirror raw data exactly. Never enrich, speculate, or add unreported vulnerabilities.\n"  # noqa: E501
@@ -149,12 +157,10 @@ class Settings(BaseSettings):
                     "- The output must be parseable by json.loads() with no pre/post processing required."  # noqa: E501
                 ),
             ),
-    }
+        }
 
     model_config = SettingsConfigDict(
-        extra="ignore",
-        env_file=".env",
-        env_file_encoding="utf-8"
+        extra="ignore", env_file=".env", env_file_encoding="utf-8"
     )
 
 

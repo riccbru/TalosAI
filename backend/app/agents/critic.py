@@ -20,5 +20,5 @@ def get_critic_agent() -> Agent:
             "Validate every finding against raw terminal evidence. "
             "Reject any claim not directly supported by tool output. "
             "Output must be a valid JSON audit report."
-        )
+        ),
     )

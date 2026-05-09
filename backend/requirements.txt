@@ -29,6 +29,7 @@ dnspython==2.8.0
 docker==7.1.0
 docstring_parser==0.17.0
 durationpy==0.10
+ecdsa==0.19.2
 email-validator==2.3.0
 et_xmlfile==2.0.0
 fastapi==0.131.0
@@ -100,6 +101,7 @@ propcache==0.4.1
 protobuf==5.29.6
 psutil==7.2.2
 pyarrow==23.0.1
+pyasn1==0.6.3
 pybase64==1.4.3
 pycparser==3.0
 pydantic==2.11.10
@@ -112,6 +114,7 @@ PyPika==0.51.1
 pyproject_hooks==1.2.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.1.1
+python-jose==3.5.0
 python-multipart==0.0.22
 python-nmap==0.7.1
 PyYAML==6.0.3
@@ -121,6 +124,7 @@ requests==2.32.5
 requests-oauthlib==2.0.0
 rich==14.3.3
 rpds-py==0.30.0
+rsa==4.9.1
 ruff==0.15.5
 shellingham==1.5.4
 six==1.17.0

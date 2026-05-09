@@ -1,9 +1,6 @@
-import json
-
 import docker
 import xmltodict
 from fastapi import APIRouter, status
-from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 
 from app.agents.orchestrator import Orchestrator
@@ -29,32 +26,23 @@ def get_mission_error(e: Exception, target: str) -> dict:
         "status": "failed",
         "target": target,
         "error_code": error_code,
-        "details": {
-            "type": error_type,
-            "message": msg
-        }
+        "details": {"type": error_type, "message": msg},
     }
+
 
 @router.post("/run")
 async def run_mission(request: MissionRequest) -> dict:
     try:
-        orchestrator = Orchestrator(
-            target=request.target,
-            user_prompt=request.prompt
-            )
+        orchestrator = Orchestrator(target=request.target, user_prompt=request.prompt)
         result = orchestrator.run()
 
         if "error" in result:
             return JSONResponse(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                content=get_mission_error(result["error"], request.target)
+                content=get_mission_error(result["error"], request.target),
             )
 
-        return {
-            "status": "completed",
-            "target": request.target,
-            "data": result
-        }
+        return {"status": "completed", "target": request.target, "data": result}
 
     except Exception as e:
         error_body = get_mission_error(e, request.target)
@@ -64,10 +52,8 @@ async def run_mission(request: MissionRequest) -> dict:
         else:
             status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
 
-        return JSONResponse(
-            status_code=status_code,
-            content=error_body
-        )
+        return JSONResponse(status_code=status_code, content=error_body)
+
 
 @router.get("/test/metasploitable")
 async def run_test() -> dict:
@@ -75,13 +61,12 @@ async def run_test() -> dict:
         client = docker.from_env()
         kali = client.containers.get("talos_kali")
         target_container = client.containers.get("talos_metasploitable")
-        target_ip = target_container.attrs['NetworkSettings']['Networks']['talos_network']['IPAddress'] # noqa: E501
+        target_ip = target_container.attrs["NetworkSettings"]["Networks"][
+            "talos_network"
+        ]["IPAddress"]  # noqa: E501
         cmd = f"nmap -oX - -n -Pn --top-ports 20 -sV -T4 {target_ip}"
         exec_result = kali.exec_run(cmd)
         data = xmltodict.parse(exec_result.output.decode())
         return {"result": data}
     except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content=e
-        )
+        return JSONResponse(status_code=500, content=e)

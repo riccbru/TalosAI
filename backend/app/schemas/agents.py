@@ -13,10 +13,9 @@ class RoleAssignment(BaseModel):
     @classmethod
     def validate_model_exists(cls, v: str) -> str:
         if v not in AVAILABLE_MODELS:
-            raise ValueError(
-                f"Model '{v}' not found in Ollama. "
-            )
+            raise ValueError(f"Model '{v}' not found in Ollama. ")
         return v
+
 
 class AgentRegistry(BaseModel):
     roles: Dict[str, RoleAssignment]

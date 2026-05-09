@@ -20,5 +20,5 @@ def get_reporter_agent() -> Agent:
             "Produce a single parseable JSON report that accurately reflects "
             "all validated findings. Raw JSON only — no markdown, no prose, "
             "no code fences. Output must pass json.loads() with no preprocessing."
-        )
+        ),
     )
