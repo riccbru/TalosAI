@@ -161,32 +161,31 @@ async def get_kali_status():
         client = docker.from_env()
         container = client.containers.get("talos_kali")
         attrs = container.attrs
-        state = attrs.get('State', {})
+        state = attrs.get("State", {})
 
-        networks = attrs.get('NetworkSettings', {}).get('Networks', {})
-        target_net = networks.get('talos_network')
+        networks = attrs.get("NetworkSettings", {}).get("Networks", {})
+        target_net = networks.get("talos_network")
         # high latency: 1800ms???
         # stats = container.stats(stream=False)
         # cpu_usage = stats['cpu_stats']['cpu_usage']['total_usage']
-        mem_limit = attrs['HostConfig']['Memory']
+        mem_limit = attrs["HostConfig"]["Memory"]
 
         latency_ms = round((time.perf_counter() - t0) * 1000, 3)
 
         return {
-            "status": "up" if state.get('Status') == "running" else "down",
+            "status": "up" if state.get("Status") == "running" else "down",
             "timestamp": _utc_now(),
             "latency_ms": latency_ms,
             "network": {
-                "gateway": target_net.get('Gateway'),
-                "ip_address": target_net.get('IPAddress'),
-                "mac_address": target_net.get('MacAddress'),
-                "internal_name": next(iter(networks.keys())) if networks else "none"
+                "gateway": target_net.get("Gateway"),
+                "ip_address": target_net.get("IPAddress"),
+                "mac_address": target_net.get("MacAddress"),
+                "internal_name": next(iter(networks.keys())) if networks else "none",
             },
             "resources": {
                 # "cpu_usage_percent": cpu_usage,
                 "memory_usage_mb": (
-                    round(mem_limit / (1024 ** 2), 2)
-                    if mem_limit > 0 else "unlimited"
+                    round(mem_limit / (1024**2), 2) if mem_limit > 0 else "unlimited"
                 )
             },
         }
@@ -200,29 +199,28 @@ async def get_metapsloitable_status():
         client = docker.from_env()
         container = client.containers.get("talos_metasploitable")
         attrs = container.attrs
-        state = attrs.get('State', {})
-        networks = attrs.get('NetworkSettings', {}).get('Networks', {})
-        target_net = networks.get('talos_network', {})
-        mem_limit = attrs['HostConfig']['Memory']
+        state = attrs.get("State", {})
+        networks = attrs.get("NetworkSettings", {}).get("Networks", {})
+        target_net = networks.get("talos_network", {})
+        mem_limit = attrs["HostConfig"]["Memory"]
 
         latency_ms = round((time.perf_counter() - t0) * 1000, 3)
 
         return {
-            "status": "up" if state.get('Status') == "running" else "down",
+            "status": "up" if state.get("Status") == "running" else "down",
             "timestamp": _utc_now(),
             "latency_ms": latency_ms,
             "network": {
-                "gateway": target_net.get('Gateway'),
-                "ip_address": target_net.get('IPAddress'),
-                "mac_address": target_net.get('MacAddress'),
-                "internal_name": next(iter(networks.keys())) if networks else "none"
+                "gateway": target_net.get("Gateway"),
+                "ip_address": target_net.get("IPAddress"),
+                "mac_address": target_net.get("MacAddress"),
+                "internal_name": next(iter(networks.keys())) if networks else "none",
             },
             "resources": {
                 "memory_usage_mb": (
-                    round(mem_limit / (1024 ** 2), 2)
-                    if mem_limit > 0 else "unlimited"
+                    round(mem_limit / (1024**2), 2) if mem_limit > 0 else "unlimited"
                 )
-            }
+            },
         }
     except Exception as e:
         return {"status": "down", "error": type(e).__name__, "message": str(e)}

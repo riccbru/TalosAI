@@ -15,5 +15,5 @@ def get_llm_for_agent(agent_key: str) -> LLM:
         num_ctx=config.num_ctx,
         temperature=config.temperature,
         model=f"ollama/{config.model}",
-        base_url=settings.OLLAMA_BASE_URL
+        base_url=settings.OLLAMA_BASE_URL,
     )

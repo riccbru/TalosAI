@@ -22,5 +22,5 @@ def get_scanner_agent() -> Agent:
             "Execute precise CLI-based discovery and enumeration commands "
             "and return raw tool output verbatim without interpretation, "
             "summarization, or fabrication."
-        )
+        ),
     )

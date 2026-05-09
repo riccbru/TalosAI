@@ -13,8 +13,9 @@ class MissionRequest(BaseModel):
             "Enumerate all open ports and services, identify vulnerabilities, "
             "attempt exploitation of confirmed weaknesses, "
             "and document all findings with evidence."
-        )
+        ),
     )
+
 
 class MissionResponse(BaseModel):
     status: str
