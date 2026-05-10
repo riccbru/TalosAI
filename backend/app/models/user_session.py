@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, Text
@@ -10,6 +11,7 @@ class UserSession(Base):
     __tablename__ = "user_sessions"
 
     id = Column(Integer, primary_key=True, index=True)
+    uuid = Column(UUID(as_uuid=True), default=uuid.uuid4, unique=True, index=True)
     user_uid = Column(
         UUID(as_uuid=True), ForeignKey("users.uuid", ondelete="CASCADE"), nullable=False
     )
