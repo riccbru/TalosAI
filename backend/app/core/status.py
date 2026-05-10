@@ -16,7 +16,7 @@ def _utc_now():
     return datetime.now(timezone.utc).isoformat()
 
 
-def get_system_status() -> dict:
+def get_backend_status() -> dict:
     warnings = []
     t0 = time.perf_counter()
     latency_ms = round((time.perf_counter() - t0) * 1000, 3)
