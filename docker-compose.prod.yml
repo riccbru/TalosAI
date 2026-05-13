@@ -22,16 +22,20 @@ services:
       - talos_network
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        BACKEND_PORT: ${BACKEND_PORT}
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT}:${BACKEND_PORT}"
     networks:
       - talos_network
     volumes:
       - ./backend/app:/app/app
       - /var/run/docker.sock:/var/run/docker.sock
     container_name: talos_backend
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload --app-dir /app/app
+    command: uvicorn main:app --host 0.0.0.0 --port ${BACKEND_PORT} --reload --app-dir /app/app
     env_file:
       - .env
     environment:
