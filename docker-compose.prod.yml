@@ -12,9 +12,8 @@ services:
       - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 3s
       timeout: 3s
-      retries: 3
+      interval: 3s
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/app/db/init:/docker-entrypoint-initdb.d:ro
@@ -22,20 +21,16 @@ services:
       - talos_network
 
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-      args:
-        BACKEND_PORT: ${BACKEND_PORT}
+    build: ./backend
     ports:
-      - "${BACKEND_PORT}:${BACKEND_PORT}"
+      - "8000:8000"
     networks:
       - talos_network
     volumes:
       - ./backend/app:/app/app
       - /var/run/docker.sock:/var/run/docker.sock
     container_name: talos_backend
-    command: uvicorn main:app --host 0.0.0.0 --port ${BACKEND_PORT} --reload --app-dir /app/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload --app-dir /app/app
     env_file:
       - .env
     environment:
