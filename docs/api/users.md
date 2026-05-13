@@ -1,19 +1,19 @@
-<a id="template-top"></a>
+<a id="users-top"></a>
 
-# Template API
-#### Base Path: `/talos/api/v`
-The Template API endpoints ...
+# Users API
+#### Base Path: `/talos/api/v1/users`
+The Users API endpoints ...
 These endpoints allow ...
 
 ## Table of Contents
-- [`HTTP /1`](#http-1)
-- [`HTTP /2`](#http-2)
+- [`GET /1`](#get-1)
+- [`GET /2`](#get-2)
 
-## HTTP /1
+## GET /1
 Description. 
 
 ```bash
-curl -s 'http://localhost:8000/talos/api/v' | jq
+curl -s 'http://localhost:8000/talos/api/v1/users' | jq
 ```
 
 **Request**
@@ -34,13 +34,13 @@ curl -s 'http://localhost:8000/talos/api/v' | jq
 | Field      | Type    | Description                                  |
 |------------|-------- |----------------------------------------------|
 
-<p align="right">(<a href="#template-top">Back to top ↑</a>)</p>
+<p align="right">(<a href="#users-top">Back to top ↑</a>)</p>
 
-## HTTP /2
+## GET /2
 Description. 
 
 ```bash
-curl -s 'http://localhost:8000/talos/api/v' | jq
+curl -s 'http://localhost:8000/talos/api/v1/users' | jq
 ```
 
 **Request**
@@ -64,5 +64,5 @@ curl -s 'http://localhost:8000/talos/api/v' | jq
 <p align="right">
   <a href="index.md">← Back to API Index</a> 
   | 
-  <a href="#template-top">Back to top ↑</a>
+  <a href="#auth-top">Back to top ↑</a>
 </p>

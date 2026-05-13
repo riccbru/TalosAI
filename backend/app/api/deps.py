@@ -1,10 +1,13 @@
 from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import decode_refresh_token
 from app.crud import crud_session, crud_user
 from app.db.session import get_db
 
+
+auth_scheme = HTTPBearer(bearerFormat="JWT")
 
 async def get_current_active_user_from_refresh(
     request: Request, db: AsyncSession = Depends(get_db)
