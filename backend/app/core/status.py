@@ -144,8 +144,8 @@ async def get_ollama_status() -> dict:
             "timestamp": _utc_now(),
             "latency_ms": latency_ms,
             "summary": {
-                "total_installed": len(models_library.models),
                 "currently_active": len(active_models.models),
+                "total_installed": len(models_library.models),
             },
             "active_models": active_models.get("models", []),
             "library": models_library.get("models", []),

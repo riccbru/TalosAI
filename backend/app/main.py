@@ -1,8 +1,10 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 
+from app.api.deps import auth_scheme
 from app.api.endpoints.auth import router as auth_router
-from app.api.endpoints.health import router as health_router
-from app.api.endpoints.mission import router as mission_router
+from app.api.endpoints.missions import router as missions_router
+from app.api.endpoints.status import router as status_router
+from app.api.endpoints.users import router as users_router
 from app.core.middleware import JWTMiddleware
 
 
@@ -20,7 +22,7 @@ app = FastAPI(
 app.add_middleware(JWTMiddleware)
 
 
-@app.get("/talos/api", tags=["Default"])
+@app.get("/talos/api", tags=["Welcome"])
 async def welcome():
     return {"message": "Welcome to TalosAI API"}
 
@@ -30,13 +32,24 @@ app.include_router(
     router=auth_router,
     prefix="/talos/api/auth",
 )
-app.include_router(
-    tags=["System"],
-    router=health_router,
-    prefix="/talos/api/system",
-)
+
 app.include_router(
     tags=["Mission"],
-    router=mission_router,
+    router=missions_router,
     prefix="/talos/api/missions",
+    dependencies=[Depends(auth_scheme)]
+)
+
+app.include_router(
+    tags=["Status"],
+    router=status_router,
+    prefix="/talos/api/status",
+    dependencies=[Depends(auth_scheme)]
+)
+
+app.include_router(
+    tags=["Users"],
+    router=users_router,
+    prefix="/talos/api/users",
+    dependencies=[Depends(auth_scheme)]
 )

@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import deps
+from app.api.deps import auth_scheme
 from app.crud import crud_session
 from app.db.session import get_db
 from app.schemas.user import AuthResponse, UserOut, UserSignin, UserSignup
@@ -48,7 +49,7 @@ async def user_refresh(
     )
 
 
-@router.post("/signout", status_code=204)
+@router.post("/signout", status_code=204, dependencies=[Depends(auth_scheme)])
 async def user_signout(
     request: Request,
     response: Response,

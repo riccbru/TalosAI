@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 from app.agents.orchestrator import Orchestrator
 from app.schemas.mission import MissionRequest
 
+
 router = APIRouter()
 
 

@@ -9,12 +9,11 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT}:${POSTGRES_PORT}"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 3s
       timeout: 3s
-      retries: 3
+      interval: 3s
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/app/db/init:/docker-entrypoint-initdb.d:ro
@@ -22,16 +21,20 @@ services:
       - talos_network
 
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      args:
+        BACKEND_PORT: ${BACKEND_PORT}
+    container_name: talos_backend
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT}:${BACKEND_PORT}"
     networks:
       - talos_network
     volumes:
       - ./backend:/app
       - /var/run/docker.sock:/var/run/docker.sock
-    container_name: talos_backend
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port ${BACKEND_PORT} --reload
     env_file:
       - .env
     environment:
@@ -41,31 +44,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-
-  # metasploitable:
-  #   image: tleemcjr/metasploitable2
-  #   container_name: talos_metasploitable
-  #   networks:
-  #     - talos_network
-  #   ports:
-  #     - "8081:80"      # Web Console (Mutillidae, DVWA)
-  #     - "2121:21"      # FTP
-  #     - "2222:22"      # SSH
-  #     - "2323:23"      # Telnet
-  #     - "4444:4444"    # Metasploit Default Listener
-  #     - "3306:3306"    # MySQL
-  #     - "5433:5432"    # PostgreSQL
-  #     - "8180:8180"    # Apache Tomcat
-  #   stdin_open: true
-  #   tty: true
-  #   command: >
-  #     sh -c "/bin/services.sh && bash"
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-f", "http://localhost"]
-  #     interval: 3s
-  #     timeout: 3s
-  #     retries: 2
-  #     start_period: 10s
 
 networks:
   talos_network:
