@@ -14,6 +14,19 @@ Contains endpoints to authenticate a user and create sessions:
 * Session termination and Sign-out
 * Token rotation (Refresh) for persistent secure access
 
+### [Missions API](./missions.md)
+Contains endpoints to manage AI-driven penetration testing operations:
+* Creation and orchestration of new security missions
+* Real-time monitoring of agent task execution
+* Retrieval of mission logs and automated security reports
+
+### [Sessions API](./sessions.md)
+Contains endpoints to :
+* 
+* 
+* 
+* 
+
 ### [Status API](./status.md)
 Contains endpoints to verify the status of the ecosystem's infrastructure:
 * PostgreSQL connectivity
@@ -27,12 +40,6 @@ Contains endpoints to manage user profiles and monitor account security:
 * Update of user preferences and account details
 * Management of active security sessions across different devices
 * Selective revocation of sessions to prevent unauthorized access
-
-### [Missions API](./missions.md)
-Contains endpoints to manage AI-driven penetration testing operations:
-* Creation and orchestration of new security missions
-* Real-time monitoring of agent task execution
-* Retrieval of mission logs and automated security reports
 
 <p align="right">(<a href="#api-top">Back to top ↑</a>)</p>
 

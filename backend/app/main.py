@@ -3,6 +3,7 @@ from fastapi import Depends, FastAPI
 from app.api.deps import auth_scheme
 from app.api.endpoints.auth import router as auth_router
 from app.api.endpoints.missions import router as missions_router
+from app.api.endpoints.sessions import router as sessions_router
 from app.api.endpoints.status import router as status_router
 from app.api.endpoints.users import router as users_router
 from app.core.middleware import JWTMiddleware
@@ -37,6 +38,13 @@ app.include_router(
     tags=["Mission"],
     router=missions_router,
     prefix="/talos/api/missions",
+    dependencies=[Depends(auth_scheme)]
+)
+
+app.include_router(
+    tags=["Sessions"],
+    router=sessions_router,
+    prefix="/talos/api/sessions",
     dependencies=[Depends(auth_scheme)]
 )
 

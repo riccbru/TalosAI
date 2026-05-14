@@ -4,7 +4,7 @@ from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
 
 from app.agents.orchestrator import Orchestrator
-from app.schemas.mission import MissionRequest
+from app.schemas.missions import MissionRequest
 
 
 router = APIRouter()

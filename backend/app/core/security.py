@@ -22,17 +22,18 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
         return False
 
 
-def create_access_token(user_data: dict) -> str:
+def create_access_token(user_uid: str, role: str = None) -> str:
     expires = datetime.now(timezone.utc) + timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
-    to_encode = {
-        "user": dict(user_data),
+    token_payload = {
+        # "user": dict(user_data),
+        "role": role,
         "exp": expires,
-        "sub": str(user_data.get("uid")),
+        "sub": str(user_uid),
     }
     return jwt.encode(
-        to_encode, settings.ACCESS_TOKEN_SECRET, algorithm=settings.JWT_ALG
+        token_payload, settings.ACCESS_TOKEN_SECRET, algorithm=settings.JWT_ALG
     )
 
 
@@ -40,15 +41,17 @@ def create_refresh_token(user_uid: str) -> str:
     expires = datetime.now(timezone.utc) + timedelta(
         days=settings.REFRESH_TOKEN_EXPIRE_DAYS
     )
-    to_encode = {"type": "refresh", "exp": expires, "sub": str(user_uid)}
+    token_payload = {"type": "refresh", "exp": expires, "sub": str(user_uid)}
     return jwt.encode(
-        to_encode, settings.REFRESH_TOKEN_SECRET, algorithm=settings.JWT_ALG
+        token_payload, settings.REFRESH_TOKEN_SECRET, algorithm=settings.JWT_ALG
     )
 
 
 def create_tokens(user_data: dict) -> tuple[str, str]:
-    access_token = create_access_token(user_data)
-    refresh_token = create_refresh_token(str(user_data.get("uid")))
+    user_role = user_data.get("role")
+    user_uid = str(user_data.get("user_uid"))
+    access_token = create_access_token(user_uid, role=user_role)
+    refresh_token = create_refresh_token(user_uid)
     return access_token, refresh_token
 
 

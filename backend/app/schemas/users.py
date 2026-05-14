@@ -3,7 +3,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from app.models.user import UserRole
+from app.models.users import UserRole
 
 
 class UserSignin(BaseModel):
@@ -19,12 +19,12 @@ class UserSignup(BaseModel):
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
-    role: UserRole
     is_active: bool
+    role: UserRole
     email: EmailStr
     created_at: datetime
     updated_at: datetime
-    uid: UUID = Field(validation_alias="uuid")
+    user_uid: UUID = Field(validation_alias="uuid")
 
 
 class AuthResponse(BaseModel):
