@@ -3,9 +3,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import deps
 from app.api.deps import auth_scheme
-from app.crud import crud_session
+from app.crud import crud_sessions
 from app.db.session import get_db
-from app.schemas.user import AuthResponse, UserOut, UserSignin, UserSignup
+from app.schemas.users import AuthResponse, UserOut, UserSignin, UserSignup
 from app.services.auth_service import auth_service
 from app.utils.auth_utils import delete_refresh_cookie
 
@@ -41,7 +41,7 @@ async def user_refresh(
     user=Depends(deps.get_current_active_user_from_refresh),
 ):
     old_token = request.cookies.get("refresh_token")
-    await crud_session.revoke_session(db, old_token)
+    await crud_sessions.revoke_session(db, old_token)
     ip_address = request.client.host
     user_agent = request.headers.get("User-Agent")
     return await auth_service.signin_user(
@@ -57,5 +57,5 @@ async def user_signout(
 ):
     token = request.cookies.get("refresh_token")
     if token:
-        await crud_session.revoke_session(db, token)
+        await crud_sessions.revoke_session(db, token)
     delete_refresh_cookie(response)

@@ -1,9 +1,27 @@
+import uuid as uuid_lib
 from datetime import datetime, timezone
+from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
-from app.models.user_session import UserSession
+from app.models.sessions import UserSession
+
+
+async def get_user_sessions(
+        db: AsyncSession,
+        user_uuid: uuid_lib.UUID,
+        revoked: Optional[bool] = None
+    ):
+    query = select(UserSession).where(
+        UserSession.user_uid == user_uuid,
+    ).order_by(UserSession.last_active.desc())
+    if revoked is not None:
+        query = query.where(UserSession.is_revoked == revoked)
+
+    result = await db.execute(query.order_by(UserSession.last_active.desc()))
+    # result = await db.execute(query)
+    return result.scalars().all()
 
 
 async def create_session(
@@ -36,3 +54,8 @@ async def revoke_session(db: AsyncSession, token: str) -> None:
     if session:
         session.is_revoked = True
         await db.commit()
+
+async def get_session_by_uuid(db: AsyncSession, session_uuid: uuid_lib.UUID):
+    query = select(UserSession).where(UserSession.uuid == session_uuid)
+    result = await db.execute(query)
+    return result.scalars().first()

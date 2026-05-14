@@ -1,7 +1,7 @@
-<a id="users-top"></a>
+<a id="sessions-top"></a>
 
-# Users API
-#### Base Path: `/talos/api/v1/users`
+# Sessions API
+#### Base Path: `/talos/api/v1/sessions`
 The Users API endpoints ...
 These endpoints allow ...
 
@@ -13,7 +13,7 @@ These endpoints allow ...
 Description. 
 
 ```bash
-curl -s 'http://localhost:8000/talos/api/v1/users' | jq
+curl -s 'http://localhost:8000/talos/api/v1/sessions' | jq
 ```
 
 **Request**
@@ -34,13 +34,13 @@ curl -s 'http://localhost:8000/talos/api/v1/users' | jq
 | Field      | Type    | Description                                  |
 |------------|-------- |----------------------------------------------|
 
-<p align="right">(<a href="#users-top">Back to top ↑</a>)</p>
+<p align="right">(<a href="#sessions-top">Back to top ↑</a>)</p>
 
 ## GET /2
 Description. 
 
 ```bash
-curl -s 'http://localhost:8000/talos/api/v1/users' | jq
+curl -s 'http://localhost:8000/talos/api/v1/sessions' | jq
 ```
 
 **Request**
@@ -64,5 +64,5 @@ curl -s 'http://localhost:8000/talos/api/v1/users' | jq
 <p align="right">
   <a href="index.md">← Back to API Index</a> 
   | 
-  <a href="#users-top">Back to top ↑</a>
+  <a href="#sessions-top">Back to top ↑</a>
 </p>
