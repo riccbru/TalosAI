@@ -41,7 +41,7 @@ async def user_refresh(
     user=Depends(deps.get_current_active_user_from_refresh),
 ):
     old_token = request.cookies.get("refresh_token")
-    await crud_sessions.revoke_session(db, old_token)
+    await crud_sessions.revoke_session_v2(db, token=old_token)
     ip_address = request.client.host
     user_agent = request.headers.get("User-Agent")
     return await auth_service.signin_user(
@@ -57,5 +57,5 @@ async def user_signout(
 ):
     token = request.cookies.get("refresh_token")
     if token:
-        await crud_sessions.revoke_session(db, token)
+        await crud_sessions.revoke_session_v2(db, token=token)
     delete_refresh_cookie(response)
