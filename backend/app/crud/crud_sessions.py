@@ -2,26 +2,11 @@ import uuid as uuid_lib
 from datetime import datetime, timezone
 from typing import Optional
 
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 from app.models.sessions import UserSession
-
-
-async def get_user_sessions(
-        db: AsyncSession,
-        user_uuid: uuid_lib.UUID,
-        revoked: Optional[bool] = None
-    ):
-    query = select(UserSession).where(
-        UserSession.user_uid == user_uuid,
-    ).order_by(UserSession.last_active.desc())
-    if revoked is not None:
-        query = query.where(UserSession.is_revoked == revoked)
-
-    result = await db.execute(query.order_by(UserSession.last_active.desc()))
-    # result = await db.execute(query)
-    return result.scalars().all()
 
 
 async def create_session(
@@ -47,15 +32,67 @@ async def get_valid_session(db: AsyncSession, token: str) -> UserSession | None:
     return result.scalars().first()
 
 
-async def revoke_session(db: AsyncSession, token: str) -> None:
-    query = select(UserSession).where(UserSession.refresh_token == token)
-    result = await db.execute(query)
-    session = result.scalars().first()
-    if session:
-        session.is_revoked = True
-        await db.commit()
+async def get_session(
+    db: AsyncSession,
+    session_uuid: Optional[uuid_lib.UUID] = None,
+    token: Optional[str] = None
+) -> Optional[UserSession]:
+    query = select(UserSession)
+    if session_uuid:
+        query = query.where(UserSession.uuid == session_uuid)
+    elif token:
+        query = query.where(UserSession.refresh_token == token)
+    else:
+        return None
 
-async def get_session_by_uuid(db: AsyncSession, session_uuid: uuid_lib.UUID):
-    query = select(UserSession).where(UserSession.uuid == session_uuid)
     result = await db.execute(query)
     return result.scalars().first()
+
+
+async def get_all_sessions(
+        db: AsyncSession,
+        user_uuid: uuid_lib.UUID,
+        revoked: Optional[bool] = None
+    ):
+    query = select(UserSession).where(
+        UserSession.user_uid == user_uuid,
+    ).order_by(UserSession.last_active.desc())
+    if revoked is not None:
+        query = query.where(UserSession.is_revoked == revoked)
+
+    result = await db.execute(query.order_by(UserSession.last_active.desc()))
+    return result.scalars().all()
+
+
+async def revoke_session(
+    db: AsyncSession,
+    session_uuid: Optional[uuid_lib.UUID] = None,
+    token: Optional[str] = None
+) -> Optional[UserSession]:
+    session = await get_session(db, session_uuid=session_uuid, token=token)
+
+    if session and not session.is_revoked:
+        session.is_revoked = True
+        session.expires_at = datetime.now(timezone.utc)
+        await db.commit()
+        await db.refresh(session)
+
+    return session
+
+
+async def revoke_all_sessions(db: AsyncSession, user_uuid: uuid_lib.UUID) -> None:
+    now = datetime.now(timezone.utc)
+
+    stmt = (
+        update(UserSession)
+        .where(UserSession.user_uid == user_uuid)
+        .where(UserSession.is_revoked.is_(False))
+        .values(
+            is_revoked=True,
+            expires_at=now
+        )
+    )
+
+    await db.execute(stmt)
+    await db.commit()
+

@@ -20,7 +20,7 @@ ENV/
 .env.*.local
 
 # PostgreSQL
-backend/app/db/init/*.sql
+database/init/*.sql
 
 # Misc
 .DS_Store
