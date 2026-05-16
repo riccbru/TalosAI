@@ -12,13 +12,78 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 from app.core.ollama import ollama_client
 
 
+BACKEND_START_TIME = datetime.now(timezone.utc)
+
+
 def _utc_now():
     return datetime.now(timezone.utc).isoformat()
+
+
+def get_service_error(e: Exception) -> dict:
+    return {
+        "status": "down",
+        "timestamp": _utc_now(),
+        "error": type(e).__name__,
+        "message": e.args[-1] if e.args else str(e),
+    }
+
+
+async def get_database_status(db: AsyncSession, engine: AsyncEngine) -> dict:
+    warnings = []
+    t0 = time.perf_counter()
+
+    version = "unknown"
+    pool_stats = {}
+    connection_state = "disconnected"
+
+    try:
+        result = await db.execute(text("SELECT version(), pg_postmaster_start_time();"))
+        version, started_at = result.fetchone()
+
+        uptime = int((datetime.now(timezone.utc) - started_at).total_seconds())
+
+        latency_ms = round((time.perf_counter() - t0) * 1000, 3)
+
+        connection_state = "connected"
+
+        raw_pool = engine.sync_engine.pool
+        for attr in ("size", "checkedin", "checkedout", "overflow"):
+            if hasattr(raw_pool, attr):
+                pool_stats[attr] = getattr(raw_pool, attr)()
+
+        checked_out = pool_stats.get("checkedout", 0)
+        pool_size = pool_stats.get("size", 1)
+        if pool_size > 0 and (checked_out / pool_size) > 0.85:
+            warnings.append("pool_near_capacity")
+        if latency_ms > 200:
+            warnings.append("high_query_latency")
+
+    except Exception as e:
+        connection_state = "disconnected"
+        warnings.append(f"connection_error: {str(e)}")
+
+    finally:
+        return {
+            "status": "up",
+            "uptime": uptime,
+            "started_at": started_at,
+            "timestamp": _utc_now(),
+            "version": version,
+            "connection": {
+                "state": connection_state,
+                "latency_ms": latency_ms,
+            },
+            "pool": pool_stats,
+            "warnings": warnings,
+        }
 
 
 def get_backend_status() -> dict:
     warnings = []
     t0 = time.perf_counter()
+
+    uptime = int((datetime.now(timezone.utc) - BACKEND_START_TIME).total_seconds())
+
     latency_ms = round((time.perf_counter() - t0) * 1000, 3)
 
     cpu_percent = psutil.cpu_percent(interval=None)
@@ -55,90 +120,53 @@ def get_backend_status() -> dict:
                     "load_percent": util.gpu,
                 }
             )
+
     except (FileNotFoundError, subprocess.SubprocessError, Exception):
         gpus = "unavailable"
 
-    return {
-        "status": "degraded" if warnings else "up",
-        "latency_ms": latency_ms,
-        "system": {
-            "os": platform.system(),
-            "os_release": platform.release(),
-            "os_version": platform.version(),
-            "architecture": platform.machine(),
-            "hostname": platform.node(),
-            "python_version": platform.python_version(),
-        },
-        "cpu": {
-            "usage_percent": cpu_percent,
-            "load_avg": list(psutil.getloadavg()),
-        },
-        "memory": {
-            "used_percent": mem.percent,
-            "available_gb": round(mem.available / 2**30, 2),
-        },
-        "disk": {
-            "free_gb": round(free_disk / 2**30, 2),
-            "used_percent": round(used_disk / total_disk * 100, 1),
-        },
-        "gpu": gpus,
-        "warnings": warnings,
-    }
-
-
-async def get_db_status(db: AsyncSession, engine: AsyncEngine) -> dict:
-    warnings = []
-    t0 = time.perf_counter()
-
-    db_version = "Unknown"
-    pool_stats = {}
-    connection_state = "disconnected"
-
-    try:
-        result = await db.execute(text("SELECT version()"))
-        db_version = result.scalar()
-        latency_ms = round((time.perf_counter() - t0) * 1000, 3)
-        connection_state = "connected"
-
-        raw_pool = engine.sync_engine.pool
-        for attr in ("size", "checkedin", "checkedout", "overflow"):
-            if hasattr(raw_pool, attr):
-                pool_stats[attr] = getattr(raw_pool, attr)()
-
-        checked_out = pool_stats.get("checkedout", 0)
-        pool_size = pool_stats.get("size", 1)
-        if pool_size > 0 and (checked_out / pool_size) > 0.85:
-            warnings.append("pool_near_capacity")
-        if latency_ms > 200:
-            warnings.append("high_query_latency")
-
-    except Exception as e:
-        connection_state = "disconnected"
-        warnings.append(f"connection_error: {str(e)}")
-
-    return {
-        "status": "up",
-        "timestamp": _utc_now(),
-        "connection": {
-            "state": connection_state,
+    finally:
+        return {
+            "status": "degraded" if warnings else "up",
+            "uptime": uptime,
+            "started_at": BACKEND_START_TIME,
             "latency_ms": latency_ms,
-        },
-        "version": db_version,
-        "pool": pool_stats,
-        "warnings": warnings,
-    }
+            "system": {
+                "os": platform.system(),
+                "os_release": platform.release(),
+                "os_version": platform.version(),
+                "architecture": platform.machine(),
+                "hostname": platform.node(),
+                "python_version": platform.python_version(),
+            },
+            "cpu": {
+                "usage_percent": cpu_percent,
+                "load_avg": list(psutil.getloadavg()),
+            },
+            "memory": {
+                "used_percent": mem.percent,
+                "available_gb": round(mem.available / 2**30, 2),
+            },
+            "disk": {
+                "free_gb": round(free_disk / 2**30, 2),
+                "used_percent": round(used_disk / total_disk * 100, 1),
+            },
+            "gpu": gpus,
+            "warnings": warnings,
+        }
 
 
 async def get_ollama_status() -> dict:
-
     try:
         t0 = time.perf_counter()
 
         models_library = await ollama_client.list()
         active_models = await ollama_client.ps()
-
         latency_ms = round((time.perf_counter() - t0) * 1000, 2)
 
+    except Exception as e:
+        return {"status": "down", "error": type(e).__name__, "message": str(e)}
+
+    finally:
         return {
             "status": "up",
             "timestamp": _utc_now(),
@@ -150,9 +178,6 @@ async def get_ollama_status() -> dict:
             "active_models": active_models.get("models", []),
             "library": models_library.get("models", []),
         }
-
-    except Exception as e:
-        return {"status": "down", "error": type(e).__name__, "message": str(e)}
 
 
 async def get_kali_status():
@@ -172,6 +197,10 @@ async def get_kali_status():
 
         latency_ms = round((time.perf_counter() - t0) * 1000, 3)
 
+    except Exception as e:
+        return {"status": "down", "error": type(e).__name__, "message": str(e)}
+
+    finally:
         return {
             "status": "up" if state.get("Status") == "running" else "down",
             "timestamp": _utc_now(),
@@ -185,12 +214,10 @@ async def get_kali_status():
             "resources": {
                 # "cpu_usage_percent": cpu_usage,
                 "memory_usage_mb": (
-                    round(mem_limit / (1024**2), 2) if mem_limit > 0 else "unlimited"
+                    round(mem_limit / (1024 ** 2), 2) if mem_limit > 0 else "unlimited"
                 )
             },
         }
-    except Exception as e:
-        return {"status": "down", "error": type(e).__name__, "message": str(e)}
 
 
 async def get_metapsloitable_status():
@@ -206,6 +233,10 @@ async def get_metapsloitable_status():
 
         latency_ms = round((time.perf_counter() - t0) * 1000, 3)
 
+    except Exception as e:
+        return {"status": "down", "error": type(e).__name__, "message": str(e)}
+
+    finally:
         return {
             "status": "up" if state.get("Status") == "running" else "down",
             "timestamp": _utc_now(),
@@ -222,14 +253,3 @@ async def get_metapsloitable_status():
                 )
             },
         }
-    except Exception as e:
-        return {"status": "down", "error": type(e).__name__, "message": str(e)}
-
-
-def get_service_error(e: Exception) -> dict:
-    return {
-        "status": "down",
-        "timestamp": _utc_now(),
-        "error": type(e).__name__,
-        "message": e.args[-1] if e.args else str(e),
-    }
