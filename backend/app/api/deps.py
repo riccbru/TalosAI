@@ -15,8 +15,7 @@ auth_scheme = HTTPBearer(bearerFormat="JWT")
 
 
 async def get_current_user(
-    db: AsyncSession = Depends(get_db),
-    token: str = Depends(auth_scheme)
+    db: AsyncSession = Depends(get_db), token: str = Depends(auth_scheme)
 ) -> User:
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -27,7 +26,7 @@ async def get_current_user(
         payload = jwt.decode(
             token.credentials,
             settings.ACCESS_TOKEN_SECRET,
-            algorithms=[settings.JWT_ALG]
+            algorithms=[settings.JWT_ALG],
         )
         user_uid: str = payload.get("sub")
         if user_uid is None:
@@ -42,6 +41,12 @@ async def get_current_user(
         raise credentials_exception
 
     return user
+
+
+async def get_current_admin(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    return current_user
 
 
 async def get_current_active_user_from_refresh(

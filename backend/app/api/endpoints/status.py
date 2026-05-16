@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.status import (
     get_backend_status,
-    get_db_status,
+    get_database_status,
     get_kali_status,
     get_metapsloitable_status,
     get_ollama_status,
@@ -18,7 +18,7 @@ from app.db.session import engine, get_db
 router = APIRouter()
 
 services = {
-    "db": lambda db: get_db_status(db, engine),
+    "database": lambda db: get_database_status(db, engine),
     "backend": get_backend_status,
     "ollama": get_ollama_status,
     "kali": get_kali_status,
