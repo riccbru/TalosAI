@@ -12,7 +12,7 @@ from app.agents.tester import get_tester_agent
 from app.core.status import _utc_now
 
 
-class Orchestrator:
+class LocalOrchestrator:
     def __init__(self, target: str, user_prompt: Optional[str] = None):
         self.target = target
         self.planner = get_planner_agent()
