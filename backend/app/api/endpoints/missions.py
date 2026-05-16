@@ -3,7 +3,8 @@ import xmltodict
 from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
 
-from app.agents.orchestrator import Orchestrator
+from app.agents.hybrid_orechstrator import HybridOrchestrator
+from app.agents.local_orchestrator import LocalOrchestrator
 from app.schemas.missions import MissionRequest
 
 
@@ -31,10 +32,26 @@ def get_mission_error(e: Exception, target: str) -> dict:
     }
 
 
-@router.post("/run")
-async def run_mission(request: MissionRequest) -> dict:
+@router.post("/run/hybrid")
+async def hybrid_run_mission(request: MissionRequest) -> dict:
+    orchestrator = HybridOrchestrator(target=request.target, user_prompt=request.prompt)
+    result = orchestrator.run()
+
+    if result["status"] == "failed":
+        return JSONResponse(
+            content=result,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+    return result
+
+
+@router.post("/run/local")
+async def local_run_mission(request: MissionRequest) -> dict:
     try:
-        orchestrator = Orchestrator(target=request.target, user_prompt=request.prompt)
+        orchestrator = LocalOrchestrator(
+            target=request.target, user_prompt=request.prompt
+        )
         result = orchestrator.run()
 
         if "error" in result:
@@ -56,7 +73,7 @@ async def run_mission(request: MissionRequest) -> dict:
         return JSONResponse(status_code=status_code, content=error_body)
 
 
-@router.get("/test/metasploitable")
+@router.get("/test/metasploitable/local")
 async def run_test() -> dict:
     try:
         client = docker.from_env()
