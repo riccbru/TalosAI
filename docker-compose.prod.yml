@@ -16,7 +16,6 @@ services:
       interval: 3s
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database/init:/docker-entrypoint-initdb.d:ro
     networks:
       - talos_network
 
