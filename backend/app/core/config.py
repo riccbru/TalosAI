@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int
     REFRESH_TOKEN_EXPIRE_DAYS: int
 
+    GEMINI_MODEL: str
     PLANNER_MODEL: str
     SCANNER_MODEL: str
     TESTER_MODEL: str
