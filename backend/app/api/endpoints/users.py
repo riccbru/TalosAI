@@ -16,11 +16,13 @@ router = APIRouter()
 
 @router.get("", response_model=UsersListOut)
 async def get_users_list(
+    active: Optional[str] = None,
+    search: Optional[str] = None,
     db: AsyncSession = Depends(deps.get_db),
     admin: User = Depends(deps.get_current_admin)
 ):
-    users = await crud_users.get_all_users(db)
-    return {"users": users}
+    users = await crud_users.get_all_users(db, search=search, active=active)
+    return { "users": users }
 
 
 @router.get("/profile", response_model=UserOut)
@@ -46,7 +48,8 @@ async def get_user_by_admin(
     db: AsyncSession = Depends(deps.get_db),
     admin: User = Depends(deps.get_current_admin)
 ):
-    return await crud_users.get_user_by_uuid(db, user_uuid=user_uid)
+    user = await crud_users.get_user_by_uuid(db, user_uuid=user_uid)
+    return user
 
 
 @router.patch("/{user_uid}", response_model=UserOut)
@@ -56,15 +59,16 @@ async def admin_update_user(
     db: AsyncSession = Depends(deps.get_db),
     admin: User = Depends(deps.get_current_admin)
 ):
-    return await crud_users.user_update(
+    user = await crud_users.user_update(
         db, user_uuid=user_uid, update_data=payload
     )
+    return user
 
 
 @router.get("/{user_uid}/sessions", response_model=SessionsListOut)
 async def get_user_sessions_by_admin(
     user_uid: uuid_lib.UUID,
-    revoked: Optional[bool] = None,
+    revoked: Optional[str] = None,
     db: AsyncSession = Depends(deps.get_db),
     admin: User = Depends(deps.get_current_admin)
 ):

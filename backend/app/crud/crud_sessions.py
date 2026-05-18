@@ -52,14 +52,13 @@ async def get_session(
 async def get_all_sessions(
         db: AsyncSession,
         user_uuid: uuid_lib.UUID,
-        revoked: Optional[bool] = None
+        revoked: Optional[str] = None
     ):
     query = select(UserSession).where(
         UserSession.user_uid == user_uuid,
     ).order_by(UserSession.last_active.desc())
-    if revoked is not None:
-        query = query.where(UserSession.is_revoked == revoked)
-
+    if revoked in ['true', 'false']:
+        query = query.where(UserSession.is_revoked == (revoked == 'true'))
     result = await db.execute(query.order_by(UserSession.last_active.desc()))
     return result.scalars().all()
 

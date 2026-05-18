@@ -21,12 +21,16 @@ class JWTMiddleware(BaseHTTPMiddleware):
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
             return JSONResponse(
-                {"detail": "Missing or invalid authorization header"}, status_code=401
+                status_code=401,
+                content={"detail": "Missing authorization header"}
             )
 
         payload = decode_access_token(auth_header.removeprefix("Bearer "))
         if not payload:
-            return JSONResponse({"detail": "Invalid or expired token"}, status_code=401)
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "Invalid or expired access token"}
+            )
 
         request.state.user = payload.get("user")
         return await call_next(request)

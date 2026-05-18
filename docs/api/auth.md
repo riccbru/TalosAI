@@ -1,8 +1,9 @@
 <a id="auth-top"></a>
 
 # Auth API
-#### Base Path: `/talos/api/v1/auth`
+#### Base Path: `/talos/api/auth`
 The Auth API endpoints manage user identity and session lifecycle.
+
 These endpoints allow users to securely register, authenticate, and maintain persistent access via token rotation.
 
 ## Table of Contents
@@ -15,7 +16,7 @@ These endpoints allow users to securely register, authenticate, and maintain per
 Creates a new user account. 
 
 ```bash
-curl -s -X 'POST' 'http://localhost:8000/talos/api/v1/auth/signup' \
+curl -s -X 'POST' 'http://localhost:8000/talos/api/auth/signup' \
         -H 'Content-Type: application/json' \
         -d '{ "email": "mail@domain.tld", "password": "Password123!" }' | jq
 ```
@@ -57,7 +58,7 @@ curl -s -X 'POST' 'http://localhost:8000/talos/api/v1/auth/signup' \
 Authenticates the user and starts a session setting a refresh_token cookie (Secure; HttpOnly; SameSite=Strict).
 
 ```bash
-curl -s -X 'POST' 'http://localhost:8000/talos/api/v1/auth/signup' \
+curl -s -X 'POST' 'http://localhost:8000/talos/api/auth/signup' \
         -H 'Content-Type: application/json' \
         -d '{ "email": "mail@domain.tld", "password": "Password123!" }' | jq
 ```
@@ -100,7 +101,7 @@ curl -s -X 'POST' 'http://localhost:8000/talos/api/v1/auth/signup' \
 Generates a new access token using the refresh token stored in the cookies. Implements token rotation.
 
 ```bash
-curl -s -X 'POST' 'http://localhost:8000/talos/api/v1/auth/refresh' \
+curl -s -X 'POST' 'http://localhost:8000/talos/api/auth/refresh' \
         -b 'refresh_token=<token>' | jq
 ```
 
@@ -112,7 +113,7 @@ curl -s -X 'POST' 'http://localhost:8000/talos/api/v1/auth/refresh' \
 Invalidates the current session in the database and removes the refresh cookie.
 
 ```bash
-curl -s -X 'POST' 'http://localhost:8000/talos/api/v1/auth/signout' \
+curl -s -X 'POST' 'http://localhost:8000/talos/api/auth/signout' \
         -H 'Authorization: Bearer <access_token>' | jq
 ```
 

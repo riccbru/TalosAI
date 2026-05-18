@@ -1,5 +1,6 @@
 import uuid as uuid_lib
 from datetime import datetime, timezone
+from typing import Optional
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -31,8 +32,17 @@ async def create_user(db: AsyncSession, user_in: UserSignup):
     return db_user
 
 
-async def get_all_users(db: AsyncSession) -> list[User]:
-    result = await db.execute(select(User).order_by(User.created_at.asc()))
+async def get_all_users(
+        db: AsyncSession,
+        search: Optional[str] = None,
+        active: Optional[bool] = None
+    ) -> list[User]:
+    query = select(User)
+    if active in ['true', 'false']:
+        query = query.where(User.is_active == (active == 'true'))
+    if search is not None:
+        query = query.where(User.email.icontains(search.strip()))
+    result = await db.execute(query.order_by(User.created_at.asc()))
     return list(result.scalars().all())
 
 
