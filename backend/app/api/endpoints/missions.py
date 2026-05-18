@@ -3,7 +3,7 @@ import xmltodict
 from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
 
-from app.agents.hybrid_orechstrator import HybridOrchestrator
+from app.agents.hybrid_orchestrator import HybridOrchestrator
 from app.agents.local_orchestrator import LocalOrchestrator
 from app.schemas.missions import MissionRequest
 
@@ -36,8 +36,18 @@ def get_mission_error(e: Exception, target: str) -> dict:
 async def hybrid_run_mission(request: MissionRequest) -> dict:
     orchestrator = HybridOrchestrator(target=request.target, user_prompt=request.prompt)
     result = orchestrator.run()
+    print(result)
 
-    if result["status"] == "failed":
+    if result.get("status") in ["failed", "error"]:
+        # Se l'errore arriva da Google Gemini, rispondi
+        # con il suo schema e il suo codice HTTP nativo
+        if result.get("source") == "google":
+            return JSONResponse(
+                content=result["details"],
+                status_code=result["code"]
+            )
+
+        # Per qualsiasi altro errore generico dell'applicazione: 500
         return JSONResponse(
             content=result,
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -87,4 +97,7 @@ async def run_test() -> dict:
         data = xmltodict.parse(exec_result.output.decode())
         return {"result": data}
     except Exception as e:
-        return JSONResponse(status_code=500, content=e)
+        return JSONResponse(
+            content=e,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
