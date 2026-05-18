@@ -7,7 +7,7 @@
 <p align="center">
   <img src="https://img.shields.io/github/last-commit/riccbru/TalosAI?color=red" />
   <img src="https://img.shields.io/github/languages/top/riccbru/TalosAI?color=green" />
-  <img src="https://img.shields.io/github/languages/code-size/riccbru/TalosAI" />
+  <img src="https://img.shields.io/github/languages/code-size/riccbru/TalosAI?color=blue" />
 </p>
 
 <!-- TABLE OF CONTENTS -->
@@ -45,7 +45,7 @@ TalosAI is a sovereign, self-hosted penetration testing agent designed for autom
 
 [![Docker][docker-img]][docker-url] [![Docker Compose][docker-compose-img]][docker-compose-url] [![Gitlab CI][gitlab-ci-img]][gitlab-ci-url] 
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+<p align="right">(<a href="#readme-top">back to top ↑</a>)</p>
 
 <!-- GETTING STARTED -->
 ## Getting Started
@@ -69,7 +69,7 @@ Ensure your host machine meets the following requirements:
     ```bash
     docker-compose up --build
     ```
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+<p align="right">(<a href="#readme-top">back to top ↑</a>)</p>
 
 <!-- DOCUMENTATION -->
 ## Documentation
@@ -79,14 +79,14 @@ The documentation provides a comprehensive deep-dive into the TalosAI ecosystem,
 
 _For more information, please refer to the [Documentation][docs-url]_
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+<p align="right">(<a href="#readme-top">back to top ↑</a>)</p>
 
 <!-- LICENSE -->
 ## License
 
 Distributed under the **MIT License**. See [`LICENSE`](./LICENSE) for more information.
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+<p align="right">(<a href="#readme-top">back to top ↑</a>)</p>
 
 <!-- CONTACT -->
 ## Contact
@@ -94,7 +94,7 @@ Riccardo Bruno
 
 Project Link: [https://github.com/riccbru/TalosAI](https://github.com/riccbru/TalosAI)
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+<p align="right">(<a href="#readme-top">back to top ↑</a>)</p>
 
 
 

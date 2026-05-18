@@ -1,5 +1,3 @@
-import docker
-import xmltodict
 from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
 
@@ -16,7 +14,7 @@ def get_mission_error(e: Exception, target: str) -> dict:
 
     if "APIConnectionError" in error_type or "ConnectionError" in error_type:
         error_code = "PROVIDER_UNREACHABLE"
-        msg = "Could not connect to the AI model provider (Ollama)."
+        msg = "Could not connect to the AI model provider (Ollama)"
     elif "ValidationError" in error_type:
         error_code = "CONFIG_ERROR"
         msg = "Invalid agent or task configuration."
@@ -32,22 +30,20 @@ def get_mission_error(e: Exception, target: str) -> dict:
     }
 
 
-@router.post("/run/hybrid")
+@router.post("/hybrid")
 async def hybrid_run_mission(request: MissionRequest) -> dict:
     orchestrator = HybridOrchestrator(target=request.target, user_prompt=request.prompt)
     result = orchestrator.run()
     print(result)
 
     if result.get("status") in ["failed", "error"]:
-        # Se l'errore arriva da Google Gemini, rispondi
-        # con il suo schema e il suo codice HTTP nativo
+
         if result.get("source") == "google":
             return JSONResponse(
                 content=result["details"],
                 status_code=result["code"]
             )
 
-        # Per qualsiasi altro errore generico dell'applicazione: 500
         return JSONResponse(
             content=result,
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -56,7 +52,7 @@ async def hybrid_run_mission(request: MissionRequest) -> dict:
     return result
 
 
-@router.post("/run/local")
+@router.post("/local")
 async def local_run_mission(request: MissionRequest) -> dict:
     try:
         orchestrator = LocalOrchestrator(
@@ -81,23 +77,3 @@ async def local_run_mission(request: MissionRequest) -> dict:
             status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
 
         return JSONResponse(status_code=status_code, content=error_body)
-
-
-@router.get("/test/metasploitable/local")
-async def run_test() -> dict:
-    try:
-        client = docker.from_env()
-        kali = client.containers.get("talos_kali")
-        target_container = client.containers.get("talos_metasploitable")
-        target_ip = target_container.attrs["NetworkSettings"]["Networks"][
-            "talos_network"
-        ]["IPAddress"]  # noqa: E501
-        cmd = f"nmap -oX - -n -Pn --top-ports 20 -sV -T4 {target_ip}"
-        exec_result = kali.exec_run(cmd)
-        data = xmltodict.parse(exec_result.output.decode())
-        return {"result": data}
-    except Exception as e:
-        return JSONResponse(
-            content=e,
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
-        )
