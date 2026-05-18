@@ -6,7 +6,7 @@
 
 # `Documentation`
 
-## [`Architecture`](./ARCH.md)
+## [`Architecture`](./arch.md)
 Detailed breakdown of the Multi-Agent System architecture.
 
 ## [`API Reference`](./api/index.md)
