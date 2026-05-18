@@ -51,6 +51,10 @@ class HybridOrchestrator:
                 "strategy for a local tool executor."
             )
 
+            # self._emit_log(
+            #     "Planner", f"[GEMINI API CALL] model={settings.GEMINI_MODEL}"
+            # )
+            print(f"[GEMINI API CALL] Planner Agent: model={settings.GEMINI_MODEL}")
             response_planner = gemini_client.models.generate_content(
                 contents=planning_prompt,
                 model=settings.GEMINI_MODEL,
@@ -113,6 +117,10 @@ class HybridOrchestrator:
                 "specify: port, service, and vulnerability."
             )
 
+            # self._emit_log(
+            #     "Critic", f"[GEMINI API CALL] model={settings.GEMINI_MODEL}"
+            # )
+            print(f"[GEMINI API CALL] Critic Agent: model={settings.GEMINI_MODEL}")
             response_critic = gemini_client.models.generate_content(
                 contents=prompt_audit,
                 model=settings.GEMINI_MODEL,
