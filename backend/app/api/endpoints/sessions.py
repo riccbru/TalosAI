@@ -16,7 +16,7 @@ router = APIRouter()
 
 @router.get("", response_model=SessionsListOut)
 async def get_all_sessions(
-    revoked: Optional[bool] = None,
+    revoked: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
 ):
@@ -51,7 +51,7 @@ async def get_session_by_uuid(
     if session.user_uid != current_user.uuid:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    return { "session": session }
+    return session
 
 
 @router.delete("/{session_uid}", response_model=SessionSingleOut)
@@ -75,4 +75,4 @@ async def delete_session_by_uuid(
         db, session_uuid=session_uid
     )
 
-    return { "session": updated_session }
+    return updated_session

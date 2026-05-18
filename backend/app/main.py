@@ -6,16 +6,20 @@ from app.api.endpoints.missions import router as missions_router
 from app.api.endpoints.sessions import router as sessions_router
 from app.api.endpoints.status import router as status_router
 from app.api.endpoints.users import router as users_router
+from app.core.config import settings
 from app.core.middleware import JWTMiddleware
+
+
+env_dev = settings.DEV is True
 
 
 app = FastAPI(
     version="0.1.0",
     title="TalosAI API",
     redirect_slashes=False,
-    docs_url="/talos/docs",
-    redoc_url="/talos/redoc",
-    openapi_url="/talos/openapi.json",
+    docs_url="/talos/docs" if env_dev else None,
+    redoc_url="/talos/redoc" if env_dev else None,
+    openapi_url="/talos/openapi.json" if env_dev else None,
     description="AI-powered Penetration Testing Agent",
 )
 
