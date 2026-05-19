@@ -1,5 +1,4 @@
 import json
-import subprocess
 from typing import List, Optional
 
 # from crewai import Crew, Task
@@ -7,6 +6,7 @@ from google import genai
 from pydantic import BaseModel, Field
 
 from app.agents.tester import get_tester_agent
+from app.agents.tools import kali_tool
 from app.core.config import settings
 
 
@@ -39,7 +39,7 @@ class NextStepDecision(BaseModel):
 class HybridOrchestratorV2:
     def __init__(self, target: str, user_prompt: Optional[str] = None):
         self.target = target
-        self.local_executor = get_tester_agent()  # Il nostro Braccio (Kali Terminal)
+        self.local_executor = get_tester_agent()
         self.user_prompt = (
             user_prompt or "Perform a comprehensive structural penetration test."
         )
@@ -67,25 +67,9 @@ class HybridOrchestratorV2:
     def _execute_micro_task(
             self, command_to_run: str, expected_description: str
         ) -> str:
-        TIMEOUT = 200
-        try:
-            full_cmd = ["docker", "exec", "talos_kali", "bash", "-c", command_to_run]
-
-            result = subprocess.run(
-                full_cmd,
-                text=True,
-                timeout=TIMEOUT,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE
-            )
-
-            output = result.stdout + result.stderr
-            return output if output.strip() else "Command executed with no output."
-
-        except subprocess.TimeoutExpired:
-            return f"ERROR: Command execution timed out after {TIMEOUT} seconds."
-        except Exception as e:
-            return f"ERROR: Failed to run command via Docker: {str(e)}"
+        self._emit_log("Tester", f"Running directly via Docker: {command_to_run}")
+        output = kali_tool._run(command=command_to_run)
+        return output
 
     def run(self) -> dict:
         try:
