@@ -12,7 +12,7 @@ gemini_client = genai.Client()
 
 
 
-class HybridOrchestrator:
+class HybridOrchestratorV1:
     def __init__(self, target: str, user_prompt: Optional[str] = None):
         self.target = target
         self.local_executor = get_tester_agent()
@@ -54,7 +54,10 @@ class HybridOrchestrator:
             # self._emit_log(
             #     "Planner", f"[GEMINI API CALL] model={settings.GEMINI_MODEL}"
             # )
-            print(f"[GEMINI API CALL] Planner Agent: model={settings.GEMINI_MODEL}")
+            print(
+                f"\033[1;44m[GEMINI API CALL]\033[0m" \
+                f"Planner Agent: \033[94m{settings.GEMINI_MODEL}\033[0m"
+            )
             response_planner = gemini_client.models.generate_content(
                 contents=planning_prompt,
                 model=settings.GEMINI_MODEL,
@@ -120,7 +123,10 @@ class HybridOrchestrator:
             # self._emit_log(
             #     "Critic", f"[GEMINI API CALL] model={settings.GEMINI_MODEL}"
             # )
-            print(f"[GEMINI API CALL] Critic Agent: model={settings.GEMINI_MODEL}")
+            print(
+                f"\033[1;44m[GEMINI API CALL]\033[0m" \
+                f"Critic Agent: \033[94m{settings.GEMINI_MODEL}\033[0m"
+            )
             response_critic = gemini_client.models.generate_content(
                 contents=prompt_audit,
                 model=settings.GEMINI_MODEL,
