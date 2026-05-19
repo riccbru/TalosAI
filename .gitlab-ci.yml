@@ -38,6 +38,6 @@ deploy_job:
     # Build images in background
     - docker compose -f docker-compose.prod.yml build
     # Alembic migration using new image
-    - docker compose -f docker-compose.prod.yml run --rm talos_backend alembic upgrade head
+    - docker compose -f docker-compose.prod.yml run --rm backend alembic upgrade head
     # Docker replaces only changed images
     - docker compose -f docker-compose.prod.yml up -d
