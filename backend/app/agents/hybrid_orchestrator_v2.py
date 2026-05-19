@@ -1,7 +1,8 @@
 import json
+import subprocess
 from typing import List, Optional
 
-from crewai import Crew, Task
+# from crewai import Crew, Task
 from google import genai
 from pydantic import BaseModel, Field
 
@@ -49,19 +50,42 @@ class HybridOrchestratorV2:
             f"\n[TALOSAI_LOG] [{status.upper()}] {step_name} -> {message}", flush=True
         )
 
+    # def _execute_micro_task(
+    #     self, command_to_run: str, expected_description: str
+    # ) -> str:
+    #     micro_task = Task(
+    #         agent=self.local_executor,
+    #         description=
+    #         f"Execute this exact command inside Kali container: {command_to_run}. " \
+    #         f"Context: {expected_description}",
+    #         expected_output="The raw command-line stdout/stderr output.",
+    #     )
+    #     crew = Crew(tasks=[micro_task], agents=[self.local_executor], verbose=False)
+    #     output = crew.kickoff()
+    #     return output.raw if hasattr(output, "raw") else str(output)
+
     def _execute_micro_task(
-        self, command_to_run: str, expected_description: str
-    ) -> str:
-        micro_task = Task(
-            agent=self.local_executor,
-            description=
-            f"Execute this exact command inside Kali container: {command_to_run}. " \
-            f"Context: {expected_description}",
-            expected_output="The raw command-line stdout/stderr output.",
-        )
-        crew = Crew(tasks=[micro_task], agents=[self.local_executor], verbose=False)
-        output = crew.kickoff()
-        return output.raw if hasattr(output, "raw") else str(output)
+            self, command_to_run: str, expected_description: str
+        ) -> str:
+        TIMEOUT = 200
+        try:
+            full_cmd = ["docker", "exec", "talos_kali", "bash", "-c", command_to_run]
+
+            result = subprocess.run(
+                full_cmd,
+                text=True,
+                timeout=TIMEOUT,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE
+            )
+
+            output = result.stdout + result.stderr
+            return output if output.strip() else "Command executed with no output."
+
+        except subprocess.TimeoutExpired:
+            return f"ERROR: Command execution timed out after {TIMEOUT} seconds."
+        except Exception as e:
+            return f"ERROR: Failed to run command via Docker: {str(e)}"
 
     def run(self) -> dict:
         try:

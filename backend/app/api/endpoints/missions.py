@@ -89,7 +89,6 @@ def hybrid_run_mission_v1(request: MissionRequest) -> dict:
             user_prompt=request.prompt
         )
         result = orchestrator.run()
-        print(f"\033[1;45mRESULT\033[0m\n{result}")
 
         if result.get("status") in ["failed", "error"]:
 
@@ -125,7 +124,6 @@ def hybrid_run_mission_v2(request: MissionRequest) -> dict:
             user_prompt=request.prompt
         )
         result = orchestrator.run()
-        print(f"\033[1;45mRESULT\033[0m\n{result}")
 
         if result.get("status") in ["failed", "error"]:
 
