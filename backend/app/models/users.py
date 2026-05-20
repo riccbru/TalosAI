@@ -9,9 +9,8 @@ from app.db.base import Base
 
 
 class UserRole(str, enum.Enum):
-    admin = "admin"
     user = "user"
-    auditor = "auditor"
+    admin = "admin"
 
 
 class User(Base):
@@ -25,7 +24,6 @@ class User(Base):
         SQLEnum(UserRole, native_enum=False), default=UserRole.user, nullable=False
     )
     is_active = Column(Boolean, default=True)
-    is_superuser = Column(Boolean, default=False)
 
     created_at = Column(
         DateTime(timezone=True),
