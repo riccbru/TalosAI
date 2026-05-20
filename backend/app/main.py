@@ -27,11 +27,6 @@ app = FastAPI(
 app.add_middleware(JWTMiddleware)
 
 
-@app.get("/talos/api", tags=["Welcome"])
-async def welcome():
-    return {"message": "Welcome to TalosAI API"}
-
-
 app.include_router(
     tags=["Auth"],
     router=auth_router,

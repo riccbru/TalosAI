@@ -35,9 +35,29 @@ deploy_job:
       CRITIC_MODEL=${CRITIC_MODEL}
       REPORTER_MODEL=${REPORTER_MODEL}
       EOF
+    # If DEV=true: database reset
+    - >
+      if [ "$DEV" = "true" ]; then
+        docker compose -f docker-compose.prod.yml down -v;
+      fi
     # Build images in background
     - docker compose -f docker-compose.prod.yml build
+    #
+    - >
+      if [ "$DEV" = "true" ]; then
+        docker compose -f docker-compose.prod.yml up -d db;
+        until docker compose -f docker-compose.prod.yml exec -T db pg_isready -U postgres; do
+          sleep 1;
+        done;
+      fi
     # Alembic migration using new image
     - docker compose -f docker-compose.prod.yml run --rm backend alembic upgrade head
+    # Seed database
+    - >
+      if [ "$DEV" = "true" ] && [ -f ~/seed.sql ]; then
+        docker compose -f docker-compose.prod.yml cp ~/seed.sql db:/tmp/seed.sql;
+        docker compose -f docker-compose.prod.yml exec -T db psql -U postgres -d talos_db -f /tmp/seed.sql;
+        docker compose -f docker-compose.prod.yml exec -T db rm /tmp/seed.sql;
+      fi
     # Docker replaces only changed images
     - docker compose -f docker-compose.prod.yml up -d

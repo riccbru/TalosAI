@@ -127,7 +127,12 @@ class HybridOrchestratorV2:
                         f"Current Focus -> Port: {port}, Service: {name}, Version: {version}.\n"  # noqa: E501
                         f"What we tried so far on this port:\n{json.dumps(history_of_this_port, indent=2)}\n\n"  # noqa: E501
                         f"Decide the next step. If you found a vulnerability/access point or concluded it is not vulnerable, "  # noqa: E501
-                        f"set action to 'NEXT_PORT' or 'COMPLETED'. Otherwise, provide the exact 'specific_command' for the tester."  # noqa: E501
+                        f"set action to 'NEXT_PORT' or 'COMPLETED'. Otherwise, provide the exact 'specific_command' for the tester.\n"  # noqa: E501
+                        "If an exploit is available in Metasploit,"
+                        "prefer generating commands using msfconsole -x or"
+                        "target-specific automated tools rather than"
+                        "running raw .py or .rb scripts from exploitdb,"
+                        "to ensure environmental compatibility."
                     )
 
                     decision_resp = gemini_client.models.generate_content(
@@ -150,10 +155,6 @@ class HybridOrchestratorV2:
                         continue
 
                     if decision["specific_command"]:
-                        self._emit_log(
-                            "Tester",
-                            f"Executing requested command: {decision['specific_command']}",  # noqa: E501
-                        )
                         cmd_output = self._execute_micro_task(
                             command_to_run=decision["specific_command"],
                             expected_description=f"Testing vulnerability on port {port}",  # noqa: E501

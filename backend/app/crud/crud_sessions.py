@@ -6,15 +6,17 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
+from app.core.security import get_refresh_token_hash
 from app.models.sessions import UserSession
 
 
 async def create_session(
-    db: AsyncSession, user_uid: int, refresh_token: str, expires_at: datetime,
+    db: AsyncSession, user_uid: uuid_lib.UUID, refresh_token: str, expires_at: datetime,
     ip_address: str, user_agent: str, last_active: datetime
 ) -> UserSession:
+    hashed_refresh_token = get_refresh_token_hash(refresh_token)
     session = UserSession(
-        user_uid=user_uid, refresh_token=refresh_token, expires_at=expires_at,
+        user_uid=user_uid, refresh_token=hashed_refresh_token, expires_at=expires_at,
         ip_address=ip_address, user_agent=user_agent, last_active=last_active
     )
     db.add(session)
@@ -23,8 +25,9 @@ async def create_session(
 
 
 async def get_valid_session(db: AsyncSession, token: str) -> UserSession | None:
+    hashed_refresh_token = get_refresh_token_hash(token)
     query = select(UserSession).where(
-        UserSession.refresh_token == token,
+        UserSession.refresh_token == hashed_refresh_token,
         UserSession.is_revoked == False, # noqa: E712
         UserSession.expires_at > datetime.now(timezone.utc),
     )
@@ -41,7 +44,8 @@ async def get_session(
     if session_uuid:
         query = query.where(UserSession.uuid == session_uuid)
     elif token:
-        query = query.where(UserSession.refresh_token == token)
+        hashed_refresh_token = get_refresh_token_hash(token)
+        query = query.where(UserSession.refresh_token == hashed_refresh_token)
     else:
         return None
 
@@ -80,18 +84,15 @@ async def revoke_session(
 
 
 async def revoke_all_sessions(db: AsyncSession, user_uuid: uuid_lib.UUID) -> None:
-    now = datetime.now(timezone.utc)
-
-    stmt = (
+    query = (
         update(UserSession)
         .where(UserSession.user_uid == user_uuid)
         .where(UserSession.is_revoked.is_(False))
         .values(
             is_revoked=True,
-            expires_at=now
+            expires_at=datetime.now(timezone.utc)
         )
     )
-
-    await db.execute(stmt)
+    await db.execute(query)
     await db.commit()
 

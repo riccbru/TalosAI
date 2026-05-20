@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api import deps
-from app.api.deps import auth_scheme
 from app.crud import crud_sessions
 from app.db.session import get_db
 from app.schemas.users import AuthResponse, UserOut, UserSignin, UserSignup
@@ -18,7 +17,7 @@ async def user_signup(user_in: UserSignup, db: AsyncSession = Depends(get_db)):
     return await auth_service.signup_user(db, user_in)
 
 
-@router.post("/signin", response_model=AuthResponse)
+@router.post("/signin", response_model=AuthResponse, status_code=status.HTTP_200_OK)
 async def user_signin(
     request: Request,
     response: Response,
@@ -33,7 +32,7 @@ async def user_signin(
     )
 
 
-@router.post("/refresh", response_model=AuthResponse)
+@router.post("/refresh", response_model=AuthResponse, status_code=status.HTTP_200_OK)
 async def user_refresh(
     request: Request,
     response: Response,
@@ -49,7 +48,7 @@ async def user_refresh(
     )
 
 
-@router.post("/signout", status_code=204, dependencies=[Depends(auth_scheme)])
+@router.post("/signout",  status_code=status.HTTP_204_NO_CONTENT)
 async def user_signout(
     request: Request,
     response: Response,

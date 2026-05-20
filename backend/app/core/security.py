@@ -1,3 +1,4 @@
+import hashlib
 from datetime import datetime, timedelta, timezone
 
 from argon2 import PasswordHasher
@@ -15,6 +16,10 @@ def get_password_hash(password: str) -> str:
     return hash
 
 
+def get_refresh_token_hash(refresh_token: str) -> str:
+    return hashlib.sha256(refresh_token.encode("utf-8")).hexdigest()
+
+
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     try:
         return ph.verify(hashed_password, plain_password)
@@ -27,7 +32,6 @@ def create_access_token(user_uid: str, role: str = None) -> str:
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
     token_payload = {
-        # "user": dict(user_data),
         "role": role,
         "exp": expires,
         "sub": str(user_uid),

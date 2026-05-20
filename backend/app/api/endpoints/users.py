@@ -14,7 +14,7 @@ from app.schemas.users import UserOut, UserPasswordUpdate, UsersListOut, UserUpd
 router = APIRouter()
 
 
-@router.get("", response_model=UsersListOut)
+@router.get("", response_model=UsersListOut, status_code=status.HTTP_200_OK)
 async def get_users_list(
     active: Optional[str] = None,
     search: Optional[str] = None,
@@ -25,7 +25,7 @@ async def get_users_list(
     return { "users": users }
 
 
-@router.get("/profile", response_model=UserOut)
+@router.get("/profile", response_model=UserOut, status_code=status.HTTP_200_OK)
 async def get_profile(
     current_user: User = Depends(deps.get_current_user)
 ):
@@ -42,7 +42,7 @@ async def change_password(
     return None
 
 
-@router.get("/{user_uid}", response_model=UserOut)
+@router.get("/{user_uid}", response_model=UserOut, status_code=status.HTTP_200_OK)
 async def get_user_by_admin(
     user_uid: uuid_lib.UUID,
     db: AsyncSession = Depends(deps.get_db),
@@ -52,7 +52,7 @@ async def get_user_by_admin(
     return user
 
 
-@router.patch("/{user_uid}", response_model=UserOut)
+@router.patch("/{user_uid}", response_model=UserOut, status_code=status.HTTP_200_OK)
 async def admin_update_user(
     user_uid: uuid_lib.UUID,
     payload: UserUpdate,
@@ -65,7 +65,11 @@ async def admin_update_user(
     return user
 
 
-@router.get("/{user_uid}/sessions", response_model=SessionsListOut)
+@router.get(
+        "/{user_uid}/sessions",
+        response_model=SessionsListOut,
+        status_code=status.HTTP_200_OK
+)
 async def get_user_sessions_by_admin(
     user_uid: uuid_lib.UUID,
     revoked: Optional[str] = None,
