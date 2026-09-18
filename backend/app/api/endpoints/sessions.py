@@ -8,7 +8,7 @@ from app.api import deps
 from app.crud import crud_sessions
 from app.db.session import get_db
 from app.models.users import User
-from app.schemas.sessions import SessionSingleOut, SessionsListOut
+from app.schemas.sessions import SessionData, SessionsListOut
 
 
 router = APIRouter()
@@ -37,7 +37,7 @@ async def delete_all_sessions(
     return None
 
 
-@router.get("/{session_uid}", response_model=SessionSingleOut)
+@router.get("/{session_uid}", response_model=SessionData)
 async def get_session_by_uuid(
     session_uid: UUID,
     db: AsyncSession = Depends(get_db),
@@ -54,7 +54,7 @@ async def get_session_by_uuid(
     return session
 
 
-@router.delete("/{session_uid}", response_model=SessionSingleOut)
+@router.delete("/{session_uid}", response_model=SessionData)
 async def delete_session_by_uuid(
     session_uid: UUID,
     db: AsyncSession = Depends(get_db),

@@ -54,7 +54,16 @@ async def get_user_by_email(db: AsyncSession, email: str):
     return result.scalars().first()
 
 
-async def get_user_by_uuid(db: AsyncSession, user_uuid: str):
+async def get_user_by_uuid(db: AsyncSession, user_uuid):
+    if isinstance(user_uuid, str):
+        try:
+            user_uuid = uuid_lib.UUID(user_uuid)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+
     query = select(User).where(User.uuid == user_uuid)
     result = await db.execute(query)
     user = result.scalars().first()

@@ -17,9 +17,5 @@ class SessionData(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class SessionSingleOut(BaseModel):
-    session: SessionData
-
-
 class SessionsListOut(BaseModel):
     sessions: List[SessionData]

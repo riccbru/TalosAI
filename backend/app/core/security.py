@@ -1,4 +1,5 @@
 import hashlib
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from argon2 import PasswordHasher
@@ -45,7 +46,12 @@ def create_refresh_token(user_uid: str) -> str:
     expires = datetime.now(timezone.utc) + timedelta(
         days=settings.REFRESH_TOKEN_EXPIRE_DAYS
     )
-    token_payload = {"type": "refresh", "exp": expires, "sub": str(user_uid)}
+    token_payload = {
+        "type": "refresh",
+        "exp": expires,
+        "sub": str(user_uid),
+        "jti": str(uuid.uuid4()),
+    }
     return jwt.encode(
         token_payload, settings.REFRESH_TOKEN_SECRET, algorithm=settings.JWT_ALG
     )

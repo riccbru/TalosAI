@@ -37,14 +37,13 @@ async def user_refresh(
     request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
-    user=Depends(deps.get_current_active_user_from_refresh),
+    user_session=Depends(deps.get_current_active_user_from_refresh),
 ):
-    old_token = request.cookies.get("refresh_token")
-    await crud_sessions.revoke_session(db, token=old_token)
+    user, session = user_session
     ip_address = request.client.host
     user_agent = request.headers.get("User-Agent")
-    return await auth_service.signin_user(
-        db, response, user, ip_address=ip_address, user_agent=user_agent
+    return await auth_service.refresh_session(
+        db, response, session, user, ip_address=ip_address, user_agent=user_agent
     )
 
 

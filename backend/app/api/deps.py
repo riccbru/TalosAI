@@ -1,13 +1,14 @@
+import uuid as uuid_lib
+
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer
-from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.config import settings
-from app.core.security import decode_refresh_token
+from app.core.security import decode_access_token, decode_refresh_token
 from app.crud import crud_sessions, crud_users
 from app.db.session import get_db
+from app.models.sessions import UserSession
 from app.models.users import User
 
 
@@ -22,22 +23,23 @@ async def get_current_user(
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    try:
-        payload = jwt.decode(
-            token.credentials,
-            settings.ACCESS_TOKEN_SECRET,
-            algorithms=[settings.JWT_ALG],
-        )
-        user_uid: str = payload.get("sub")
-        if user_uid is None:
-            raise credentials_exception
-    except JWTError:
+    payload = decode_access_token(token.credentials)
+    if not payload:
         raise credentials_exception
 
-    result = await db.execute(select(User).where(User.uuid == user_uid))
+    user_uid: str = payload.get("sub")
+    if user_uid is None:
+        raise credentials_exception
+
+    try:
+        user_uuid = uuid_lib.UUID(user_uid)
+    except ValueError:
+        raise credentials_exception
+
+    result = await db.execute(select(User).where(User.uuid == user_uuid))
     user = result.scalar_one_or_none()
 
-    if user is None:
+    if user is None or not user.is_active:
         raise credentials_exception
 
     return user
@@ -51,7 +53,7 @@ async def get_current_admin(current_user: User = Depends(get_current_user)) -> U
 
 async def get_current_active_user_from_refresh(
     request: Request, db: AsyncSession = Depends(get_db)
-):
+) -> tuple[User, UserSession]:
     token = request.cookies.get("refresh_token")
     if not token:
         raise HTTPException(
@@ -77,4 +79,4 @@ async def get_current_active_user_from_refresh(
     if not user or not user.is_active:
         raise HTTPException(status_code=404, detail="User not found")
 
-    return user
+    return user, session

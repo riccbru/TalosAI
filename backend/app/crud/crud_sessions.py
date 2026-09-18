@@ -24,6 +24,25 @@ async def create_session(
     return session
 
 
+async def rotate_session(
+    db: AsyncSession,
+    session: UserSession,
+    new_refresh_token: str,
+    expires_at: datetime,
+    ip_address: str,
+    user_agent: str,
+    last_active: datetime,
+) -> UserSession:
+    session.refresh_token = get_refresh_token_hash(new_refresh_token)
+    session.expires_at = expires_at
+    session.last_active = last_active
+    session.ip_address = ip_address
+    session.user_agent = user_agent
+    await db.commit()
+    await db.refresh(session)
+    return session
+
+
 async def get_valid_session(db: AsyncSession, token: str) -> UserSession | None:
     hashed_refresh_token = get_refresh_token_hash(token)
     query = select(UserSession).where(

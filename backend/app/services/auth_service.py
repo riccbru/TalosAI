@@ -51,6 +51,31 @@ class AuthService:
 
         return AuthResponse(status="success", access_token=access_token, user=user_data)
 
+    async def refresh_session(
+        self, db: AsyncSession, response: Response, session, db_user,
+        ip_address, user_agent
+    ) -> AuthResponse:
+        user_data = UserOut.model_validate(db_user)
+
+        token_payload = user_data.model_dump(mode="json")
+
+        access_token, refresh_token = security.create_tokens(token_payload)
+
+        expires_at = datetime.now(timezone.utc) + timedelta(
+            days=settings.REFRESH_TOKEN_EXPIRE_DAYS
+        )
+
+        last_active = datetime.now(timezone.utc)
+
+        await crud_sessions.rotate_session(
+            db, session, refresh_token, expires_at,
+            ip_address, user_agent, last_active
+        )
+
+        set_refresh_cookie(response, refresh_token)
+
+        return AuthResponse(status="success", access_token=access_token, user=user_data)
+
     async def signup_user(self, db: AsyncSession, user_in) -> UserOut:
         return await crud_users.create_user(db=db, user_in=user_in)
 

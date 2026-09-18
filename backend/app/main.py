@@ -1,6 +1,6 @@
 from fastapi import Depends, FastAPI
 
-from app.api.deps import auth_scheme
+from app.api.deps import auth_scheme, get_current_user
 from app.api.endpoints.auth import router as auth_router
 from app.api.endpoints.missions import router as missions_router
 from app.api.endpoints.sessions import router as sessions_router
@@ -37,7 +37,7 @@ app.include_router(
     tags=["Mission"],
     router=missions_router,
     prefix="/talos/api/missions",
-    dependencies=[Depends(auth_scheme)]
+    dependencies=[Depends(auth_scheme), Depends(get_current_user)]
 )
 
 app.include_router(
@@ -51,7 +51,7 @@ app.include_router(
     tags=["Status"],
     router=status_router,
     prefix="/talos/api/status",
-    dependencies=[Depends(auth_scheme)]
+    dependencies=[Depends(auth_scheme), Depends(get_current_user)]
 )
 
 app.include_router(

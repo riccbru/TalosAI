@@ -32,5 +32,4 @@ class JWTMiddleware(BaseHTTPMiddleware):
                 content={"detail": "Invalid or expired access token"}
             )
 
-        request.state.user = payload.get("user")
         return await call_next(request)
