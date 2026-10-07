@@ -41,6 +41,20 @@ services:
       db:
         condition: service_healthy
 
+  kali:
+    image: vxcontrol/kali-linux:latest
+    container_name: talos_kali
+    networks:
+      - talos_network
+    stdin_open: true
+    tty: true
+    command: tail -f /dev/null
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4G
+
 networks:
   talos_network:
     driver: bridge

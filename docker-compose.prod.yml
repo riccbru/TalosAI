@@ -47,6 +47,20 @@ services:
               count: all
               capabilities: [gpu]
   
+  kali:
+    image: vxcontrol/kali-linux:latest
+    container_name: talos_kali
+    networks:
+      - talos_network
+    stdin_open: true
+    tty: true
+    command: tail -f /dev/null
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4G
+
   metasploitable:
     image: tleemcjr/metasploitable2
     container_name: talos_metasploitable
