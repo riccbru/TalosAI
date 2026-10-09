@@ -3,6 +3,7 @@ from fastapi import Depends, FastAPI
 from app.api.deps import auth_scheme, get_current_user
 from app.api.endpoints.auth import router as auth_router
 from app.api.endpoints.missions import router as missions_router
+from app.api.endpoints.missions import ws_router as missions_ws_router
 from app.api.endpoints.sessions import router as sessions_router
 from app.api.endpoints.status import router as status_router
 from app.api.endpoints.users import router as users_router
@@ -38,6 +39,15 @@ app.include_router(
     router=missions_router,
     prefix="/talos/api/missions",
     dependencies=[Depends(auth_scheme), Depends(get_current_user)]
+)
+
+# WebSocket stream: authenticated via a ?token= query param inside the handler,
+# so it is mounted WITHOUT the HTTP bearer dependencies above. The JWT HTTP
+# middleware only runs on http scope, so it does not intercept this socket.
+app.include_router(
+    tags=["Mission"],
+    router=missions_ws_router,
+    prefix="/talos/api/missions",
 )
 
 app.include_router(

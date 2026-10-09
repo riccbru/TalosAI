@@ -45,7 +45,13 @@ def _stub_agent_module(module_name: str, class_name: str) -> None:
         def run(self):
             return {"status": "completed", "stubbed": True}
 
+    class _StubMissionCancelled(Exception):
+        pass
+
     setattr(stub, class_name, _StubOrchestrator)
+    # mission_runner imports MissionCancelled from the v2 module; expose it on the
+    # stub too so app.services.mission_runner (and thus the missions router) imports.
+    setattr(stub, "MissionCancelled", _StubMissionCancelled)
     sys.modules[module_name] = stub
 
 
