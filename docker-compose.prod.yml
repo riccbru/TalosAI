@@ -52,9 +52,12 @@ services:
     container_name: talos_kali
     networks:
       - talos_network
-    stdin_open: true
     tty: true
+    stdin_open: true
     command: tail -f /dev/null
+    cap_add:
+      - NET_ADMIN   # required: nmap binary is setcap'd with cap_net_admin (not in Docker's default caps)
+      - NET_RAW     # raw sockets for SYN scans (in default caps, listed for clarity)
     deploy:
       resources:
         limits:
