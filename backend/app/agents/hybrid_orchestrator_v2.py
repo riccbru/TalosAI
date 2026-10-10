@@ -17,9 +17,13 @@ _CONFIRM_PATTERNS = [
     r"session \d+ opened",
     r"meterpreter session \d+ opened",
     r"command shell session \d+ opened",
-    r"\buid=\d+\(",                 # output of `id`
+    r"\buid=\d+\(",                 # output of `id`/`whoami` with uid
     r"backdoor has been spawned",
     r"login successful",
+    r"already exploited",           # vsftpd: backdoor port already open = confirmed
+    r"code execution",
+    r"authenticated",
+    r"privilege escalation",
 ]
 
 
@@ -296,8 +300,9 @@ class HybridOrchestratorV2:
                     "    * 'run -z' opens the session in the background instead of dropping into an interactive shell.\n"  # noqa: E501
                     "    * 'sessions -c id' proves exploitation by running a command on the opened session and printing its output.\n"  # noqa: E501
                     "    * always finish with 'exit -y' so msfconsole quits.\n"
-                    "- Do NOT guess or hardcode a payload name. Let Metasploit use the module's DEFAULT payload (always compatible). Only set a payload if the module has none by default, and then pick from the module's own compatible family (for Unix command-injection modules: cmd/unix/*, e.g. cmd/unix/reverse); never set a Meterpreter or exotic payload on a command-injection module. Do not hardcode LHOST unless required; let Metasploit auto-detect the local interface.\n"  # noqa: E501
-                    "- Consider the exploit successful ONLY if the output shows a session opened AND the proof command ('id'/'whoami') returned output; otherwise treat the service as not vulnerable and move on.\n"  # noqa: E501
+                    "- Do NOT guess or hardcode a payload name. Let Metasploit use the module's DEFAULT payload (always compatible). If the default is non-interactive (e.g. cmd/unix/reverse_netcat), prefer to set a Meterpreter payload instead (e.g. php/meterpreter/reverse_tcp, cmd/linux/http/x86/meterpreter, linux/x86/meterpreter) to ensure interactive shell support and reliable proof commands. Do not hardcode LHOST unless required; let Metasploit auto-detect the local interface.\n"  # noqa: E501
+                    "- Proof of exploitation: ALWAYS include a proof command (id, whoami, pwd, uname) in the sessions -c clause. If sessions -c fails silently, consider the exploit unconfirmed and try a different payload or approach on the next attempt.\n"  # noqa: E501
+                    "- On failure or timeout, move to NEXT_PORT instead of retrying the same approach indefinitely.\n"  # noqa: E501
                 )
 
                 decision = self._generate(manager_prompt, NextStepDecision)
