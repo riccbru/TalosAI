@@ -2,6 +2,12 @@ import docker
 from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
 
+# Hard cap per command: a tool that never returns (e.g. msfconsole holding an
+# open session) would otherwise block the worker forever and make cancel/resume
+# ineffective. `timeout` kills it, exec_run returns, and the worker unblocks.
+CMD_TIMEOUT_SECONDS = 180
+_TIMEOUT_EXIT_CODES = (124, 137)  # 124 = TERM on timeout, 137 = 128+9 (SIGKILL via -k)
+
 
 class TerminalInput(BaseModel):
     command: str = Field(
@@ -32,13 +38,23 @@ class KaliTerminalTool(BaseTool):
                 tty=False,
                 demux=True,
                 stdin=False,
-                cmd=["bash", "-c", command],
+                cmd=[
+                    "timeout", "-k", "10", str(CMD_TIMEOUT_SECONDS),
+                    "bash", "-c", command,
+                ],
             )
-            stdout = result.output[0].decode() if result.output[0] else ""
-            stderr = result.output[1].decode() if result.output[1] else ""
-            output = stdout + stderr
+            stdout = result.output[0].decode(errors="replace") if result.output[0] else ""
+            stderr = result.output[1].decode(errors="replace") if result.output[1] else ""
+            output = (stdout + stderr).strip()
 
-            return output.strip() if output.strip() else "Command returned no output."
+            if result.exit_code in _TIMEOUT_EXIT_CODES:
+                note = (
+                    f"[TALOSAI] Command killed after exceeding "
+                    f"{CMD_TIMEOUT_SECONDS}s timeout."
+                )
+                output = f"{output}\n\n{note}" if output else note
+
+            return output if output else "Command returned no output."
         except docker.errors.NotFound:
             return "Error: talos_kali container not found. Is it running?"
         except docker.errors.APIError as e:

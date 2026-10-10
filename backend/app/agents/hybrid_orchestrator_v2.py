@@ -243,12 +243,17 @@ class HybridOrchestratorV2:
                     f"Current Focus -> Port: {port}, Service: {name}, Version: {version}.\n"  # noqa: E501
                     f"What we tried so far on this port:\n{json.dumps(history_of_this_port, indent=2)}\n\n"  # noqa: E501
                     f"Decide the next step. If you found a vulnerability/access point or concluded it is not vulnerable, "  # noqa: E501
-                    f"set action to 'NEXT_PORT' or 'COMPLETED'. Otherwise, provide the exact 'specific_command' for the tester.\n"  # noqa: E501
-                    "If an exploit is available in Metasploit,"
-                    "prefer generating commands using msfconsole -x or"
-                    "target-specific automated tools rather than"
-                    "running raw .py or .rb scripts from exploitdb,"
-                    "to ensure environmental compatibility."
+                    f"set action to 'NEXT_PORT' or 'COMPLETED'. Otherwise, provide the exact 'specific_command' for the tester.\n\n"  # noqa: E501
+                    "Rules for 'specific_command' (the tester runs it verbatim, and the pentester must be able to copy-paste it to reproduce the finding):\n"  # noqa: E501
+                    "- Prefer Metasploit or target-specific automated tools over raw .py/.rb exploitdb scripts.\n"  # noqa: E501
+                    "- The command MUST be non-interactive and self-terminating: it must NEVER leave an open shell or console (that hangs the run).\n"  # noqa: E501
+                    "- For Metasploit, use exactly this shape:\n"
+                    "  msfconsole -q -x \"use <module>; set RHOSTS <ip>; set RPORT <port>; <other options>; run -z; sessions -c id; exit -y\"\n"  # noqa: E501
+                    "    * 'run -z' opens the session in the background instead of dropping into an interactive shell.\n"  # noqa: E501
+                    "    * 'sessions -c id' proves exploitation by running a command on the opened session and printing its output.\n"  # noqa: E501
+                    "    * always finish with 'exit -y' so msfconsole quits.\n"
+                    "- Do NOT guess or hardcode a payload name. Let Metasploit use the module's DEFAULT payload (always compatible). Only set a payload if the module has none by default, and then pick from the module's own compatible family (for Unix command-injection modules: cmd/unix/*, e.g. cmd/unix/reverse); never set a Meterpreter or exotic payload on a command-injection module. Do not hardcode LHOST unless required; let Metasploit auto-detect the local interface.\n"  # noqa: E501
+                    "- Consider the exploit successful ONLY if the output shows a session opened AND the proof command ('id'/'whoami') returned output; otherwise treat the service as not vulnerable and move on.\n"  # noqa: E501
                 )
 
                 decision = self._generate(manager_prompt, NextStepDecision)

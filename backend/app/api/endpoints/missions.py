@@ -96,122 +96,6 @@ async def _require_owned_mission(
     return mission
 
 
-@router.get("/{mission_uuid}")
-async def get_mission_detail(
-    mission_uuid: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> dict:
-    mission = await _require_owned_mission(db, mission_uuid, current_user.uuid)
-    ports = await crud_missions.get_ports(db, mission.uuid)
-    findings = await crud_missions.get_findings(db, mission.uuid)
-    return {
-        "mission": crud_missions.serialize_mission(mission),
-        "ports": [crud_missions.serialize_port(p) for p in ports],
-        "findings": [crud_missions.serialize_finding(f) for f in findings],
-    }
-
-
-@router.get("/{mission_uuid}/findings")
-async def list_mission_findings(
-    mission_uuid: str,
-    port: Optional[int] = Query(None, description="Filter by port number"),
-    confirmed: Optional[bool] = Query(
-        None, description="Filter by confirmed flag (true/false)"
-    ),
-    limit: int = Query(50, ge=1, le=200, description="Max findings to return"),
-    offset: int = Query(0, ge=0, description="Findings to skip (pagination)"),
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> dict:
-    """Findings of a mission, filterable by port/confirmed and paginated.
-
-    Chronological order (oldest first), same as the detail endpoint.
-    """
-    mission = await _require_owned_mission(db, mission_uuid, current_user.uuid)
-    findings, total = await crud_missions.get_findings_filtered(
-        db,
-        mission.uuid,
-        port=port,
-        confirmed=confirmed,
-        limit=limit,
-        offset=offset,
-    )
-    return {
-        "mission_uuid": str(mission.uuid),
-        "total": total,
-        "limit": limit,
-        "offset": offset,
-        "count": len(findings),
-        "findings": [crud_missions.serialize_finding(f) for f in findings],
-    }
-
-
-@router.post("/{mission_uuid}/resume", status_code=status.HTTP_202_ACCEPTED)
-async def resume_mission(
-    mission_uuid: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> dict:
-    mission = await _require_owned_mission(db, mission_uuid, current_user.uuid)
-
-    if mission.status not in RESUMABLE_STATUSES:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                f"Mission is '{mission.status}'; only "
-                f"{list(RESUMABLE_STATUSES)} missions can be resumed."
-            ),
-        )
-
-    target_ip = mission.target_ip or resolve_target_ip(mission.target)
-
-    mission_runner.launch(
-        mission_uuid=mission.uuid,
-        target=mission.target,
-        target_ip=target_ip,
-        prompt=mission.prompt,
-        loop=asyncio.get_running_loop(),
-        resume=True,
-    )
-
-    return {"mission_uuid": str(mission.uuid), "status": "running"}
-
-
-@router.post("/{mission_uuid}/cancel", status_code=status.HTTP_202_ACCEPTED)
-async def cancel_mission(
-    mission_uuid: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> dict:
-    """Stop a running mission without deleting it; it becomes 'interrupted'.
-
-    Cancellation is cooperative: the worker stops at its next checkpoint, so an
-    in-flight command finishes first. An 'interrupted' mission is resumable.
-    """
-    mission = await _require_owned_mission(db, mission_uuid, current_user.uuid)
-
-    if mission.status not in ("running", "pending"):
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                f"Mission is '{mission.status}'; only running or pending "
-                "missions can be cancelled."
-            ),
-        )
-
-    signalled = mission_runner.request_cancel(str(mission.uuid))
-    if signalled:
-        # A live worker will flip the mission to 'interrupted' at its checkpoint.
-        return {"mission_uuid": str(mission.uuid), "status": "cancelling"}
-
-    # No worker tracked in this process (e.g. a stale 'running' after a restart):
-    # mark it interrupted directly so the record reflects reality.
-    await crud_missions.update_mission_status(db, mission.uuid, "interrupted")
-    await db.commit()
-    return {"mission_uuid": str(mission.uuid), "status": "interrupted"}
-
-
 @ws_router.websocket("/ws/{mission_uuid}")
 async def mission_stream(
     websocket: WebSocket,
@@ -377,3 +261,120 @@ async def hybrid_run_mission_v2(
     )
 
     return {"mission_uuid": str(mission.uuid), "status": mission.status}
+
+
+@router.get("/{mission_uuid}")
+async def get_mission_detail(
+    mission_uuid: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    mission = await _require_owned_mission(db, mission_uuid, current_user.uuid)
+    ports = await crud_missions.get_ports(db, mission.uuid)
+    findings = await crud_missions.get_findings(db, mission.uuid)
+    return {
+        "mission": crud_missions.serialize_mission(mission),
+        "ports": [crud_missions.serialize_port(p) for p in ports],
+        "findings": [crud_missions.serialize_finding(f) for f in findings],
+    }
+
+
+@router.post("/{mission_uuid}/resume", status_code=status.HTTP_202_ACCEPTED)
+async def resume_mission(
+    mission_uuid: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    mission = await _require_owned_mission(db, mission_uuid, current_user.uuid)
+
+    if mission.status not in RESUMABLE_STATUSES:
+        allowed = " or ".join(RESUMABLE_STATUSES)
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Mission is '{mission.status}'; only {allowed} "
+                "missions can be resumed."
+            ),
+        )
+
+    target_ip = mission.target_ip or resolve_target_ip(mission.target)
+
+    mission_runner.launch(
+        mission_uuid=mission.uuid,
+        target=mission.target,
+        target_ip=target_ip,
+        prompt=mission.prompt,
+        loop=asyncio.get_running_loop(),
+        resume=True,
+    )
+
+    return {"mission_uuid": str(mission.uuid), "status": "running"}
+
+
+@router.post("/{mission_uuid}/cancel", status_code=status.HTTP_202_ACCEPTED)
+async def cancel_mission(
+    mission_uuid: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Stop a running mission without deleting it; it becomes 'interrupted'.
+
+    Cancellation is cooperative: the worker stops at its next checkpoint, so an
+    in-flight command finishes first. An 'interrupted' mission is resumable.
+    """
+    mission = await _require_owned_mission(db, mission_uuid, current_user.uuid)
+
+    if mission.status not in ("running", "pending"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Mission is '{mission.status}'; only running or pending "
+                "missions can be cancelled."
+            ),
+        )
+
+    signalled = mission_runner.request_cancel(str(mission.uuid))
+    if signalled:
+        # A live worker will flip the mission to 'interrupted' at its checkpoint.
+        return {"mission_uuid": str(mission.uuid), "status": "cancelling"}
+
+    # No worker tracked in this process (e.g. a stale 'running' after a restart):
+    # mark it interrupted directly so the record reflects reality.
+    await crud_missions.update_mission_status(db, mission.uuid, "interrupted")
+    await db.commit()
+    return {"mission_uuid": str(mission.uuid), "status": "interrupted"}
+
+
+@router.get("/{mission_uuid}/findings")
+async def list_mission_findings(
+    mission_uuid: str,
+    port: Optional[int] = Query(None, description="Filter by port number"),
+    confirmed: Optional[bool] = Query(
+        None, description="Filter by confirmed flag (true/false)"
+    ),
+    limit: int = Query(50, ge=1, le=200, description="Max findings to return"),
+    offset: int = Query(0, ge=0, description="Findings to skip (pagination)"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Findings of a mission, filterable by port/confirmed and paginated.
+
+    Chronological order (oldest first), same as the detail endpoint.
+    """
+    mission = await _require_owned_mission(db, mission_uuid, current_user.uuid)
+    findings, total = await crud_missions.get_findings_filtered(
+        db,
+        mission.uuid,
+        port=port,
+        confirmed=confirmed,
+        limit=limit,
+        offset=offset,
+    )
+    return {
+        "mission_uuid": str(mission.uuid),
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "count": len(findings),
+        "findings": [crud_missions.serialize_finding(f) for f in findings],
+    }
