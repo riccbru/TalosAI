@@ -7,6 +7,7 @@ from typing import Callable, List, Optional
 from google import genai
 from pydantic import BaseModel, Field
 
+from app.agents.exploit_db import get_exploits_for_service
 from app.agents.mission_exceptions import MissionCancelled  # noqa: F401 (re-export)
 from app.agents.tester import get_tester_agent
 from app.agents.tools import kali_lhost, kali_tool
@@ -286,13 +287,22 @@ class HybridOrchestratorV2:
                 self._check_cancel()
                 attempts += 1
 
+                # Consult exploit DB for known vulnerabilities
+                known_exploits = get_exploits_for_service(name, version)
+                exploit_hint = ""
+                if known_exploits:
+                    exploit_hint = "\n\nKNOWN EXPLOITS FOR THIS SERVICE (try these in order if automated discovery fails):\n"
+                    for module, payload, desc in known_exploits:
+                        exploit_hint += f"  - {module} (payload: {payload or 'default'}) - {desc}\n"
+
                 manager_prompt = (
                     f"You are the Lead Pentester managing an attack loop against target {self.target}.\n"  # noqa: E501
                     f"Current Focus -> Port: {port}, Service: {name}, Version: {version}.\n"  # noqa: E501
                     f"What we tried so far on this port:\n{json.dumps(history_of_this_port, indent=2)}\n\n"  # noqa: E501
                     f"Decide the next step. If you found a vulnerability/access point or concluded it is not vulnerable, "  # noqa: E501
-                    f"set action to 'NEXT_PORT' or 'COMPLETED'. Otherwise, provide the exact 'specific_command' for the tester.\n\n"  # noqa: E501
-                    "Rules for 'specific_command' (the tester runs it verbatim, and the pentester must be able to copy-paste it to reproduce the finding):\n"  # noqa: E501
+                    f"set action to 'NEXT_PORT' or 'COMPLETED'. Otherwise, provide the exact 'specific_command' for the tester.\n"  # noqa: E501
+                    f"{exploit_hint}"
+                    "\nRules for 'specific_command' (the tester runs it verbatim, and the pentester must be able to copy-paste it to reproduce the finding):\n"  # noqa: E501
                     "- Prefer Metasploit or target-specific automated tools over raw .py/.rb exploitdb scripts.\n"  # noqa: E501
                     "- The command MUST be non-interactive and self-terminating: it must NEVER leave an open shell or console (that hangs the run).\n"  # noqa: E501
                     "- For Metasploit, use exactly this shape:\n"
@@ -300,9 +310,9 @@ class HybridOrchestratorV2:
                     "    * 'run -z' opens the session in the background instead of dropping into an interactive shell.\n"  # noqa: E501
                     "    * 'sessions -c id' proves exploitation by running a command on the opened session and printing its output.\n"  # noqa: E501
                     "    * always finish with 'exit -y' so msfconsole quits.\n"
+                    "- RETRY STRATEGY: If your first attempt fails (no session, timeout, or silent failure), try a DIFFERENT exploit from the known list or a DIFFERENT payload. Keep retrying with variants until success or all options exhausted. Do NOT give up after one failure.\n"  # noqa: E501
                     "- Do NOT guess or hardcode a payload name. Let Metasploit use the module's DEFAULT payload (always compatible). If the default is non-interactive (e.g. cmd/unix/reverse_netcat), prefer to set a Meterpreter payload instead (e.g. php/meterpreter/reverse_tcp, cmd/linux/http/x86/meterpreter, linux/x86/meterpreter) to ensure interactive shell support and reliable proof commands. Do not hardcode LHOST unless required; let Metasploit auto-detect the local interface.\n"  # noqa: E501
                     "- Proof of exploitation: ALWAYS include a proof command (id, whoami, pwd, uname) in the sessions -c clause. If sessions -c fails silently, consider the exploit unconfirmed and try a different payload or approach on the next attempt.\n"  # noqa: E501
-                    "- On failure or timeout, move to NEXT_PORT instead of retrying the same approach indefinitely.\n"  # noqa: E501
                 )
 
                 decision = self._generate(manager_prompt, NextStepDecision)
