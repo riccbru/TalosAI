@@ -2,8 +2,8 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String
-from sqlalchemy.dialects.postgresql import ENUM, UUID
+from sqlalchemy import Boolean, Column, DateTime, Enum, Index, Integer, String
+from sqlalchemy.dialects.postgresql import UUID
 
 from app.db.base import Base
 
@@ -17,14 +17,6 @@ class UserRole(str, enum.Enum):
     admin = "admin"
 
 
-user_role_enum = ENUM(
-    "admin",
-    "user",
-    name="user_role",
-    create_type=False,  # Il tipo esiste già nel DB creato da init.sql
-)
-
-
 class User(Base):
     __tablename__ = "users"
 
@@ -36,7 +28,9 @@ class User(Base):
     )
     email = Column(String(255), nullable=False, unique=True)
     hashed_password = Column(String(255), nullable=False)
-    role = Column(user_role_enum, default=UserRole.user.value)
+    role = Column(
+        Enum(UserRole, native_enum=False), default=UserRole.user, nullable=False
+    )
     is_active = Column(Boolean, default=True)
     created_at = Column(
         DateTime(timezone=True),
