@@ -1,5 +1,6 @@
 import asyncio
 import uuid as uuid_lib
+from typing import Optional
 
 import docker
 from fastapi import (
@@ -72,99 +73,6 @@ def resolve_target_ip(target: str) -> str:
     return target
 
 
-@router.post("/v1/test/local")
-def local_run_mission(request: MissionRequest) -> dict:
-    try:
-        orchestrator = LocalOrchestrator(
-            target=request.target, user_prompt=request.prompt
-        )
-        result = orchestrator.run()
-
-        if "error" in result:
-            return JSONResponse(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                content=get_mission_error(result["error"], request.target),
-            )
-
-        return {"status": "completed", "target": request.target, "data": result}
-
-    except Exception as e:
-        error_body = get_mission_error(e, request.target)
-
-        if "Connection" in type(e).__name__:
-            status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-        else:
-            status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-
-        return JSONResponse(status_code=status_code, content=error_body)
-
-
-@router.post("/v1/test/hybrid")
-def hybrid_run_mission_v1(request: MissionRequest) -> dict:
-    try:
-        target = resolve_target_ip(request.target)
-        orchestrator = HybridOrchestratorV1(
-            target=target,
-            user_prompt=request.prompt
-        )
-        result = orchestrator.run()
-
-        if result.get("status") in ["failed", "error"]:
-
-            if result.get("source") == "google":
-                return JSONResponse(
-                    content=result["details"],
-                    status_code=result["code"]
-                )
-
-            return JSONResponse(
-                content=result,
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
-            )
-
-        return result
-    except Exception as e:
-        error_body = get_mission_error(e, request.target)
-
-        if "Connection" in type(e).__name__:
-            status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-        else:
-            status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-
-        return JSONResponse(status_code=status_code, content=error_body)
-
-
-@router.post("/v2/test/hybrid", status_code=status.HTTP_202_ACCEPTED)
-async def hybrid_run_mission_v2(
-    request: MissionRequest,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-) -> dict:
-    """Create the mission, return its uuid immediately, run it in the background."""
-    target_ip = resolve_target_ip(request.target)
-
-    mission = await crud_missions.create_mission(
-        db,
-        user_uid=current_user.uuid,
-        target=request.target,
-        target_ip=target_ip,
-        prompt=request.prompt,
-        version="v2",
-    )
-    await db.commit()
-
-    mission_runner.launch(
-        mission_uuid=mission.uuid,
-        target=request.target,
-        target_ip=target_ip,
-        prompt=request.prompt,
-        loop=asyncio.get_running_loop(),
-        resume=False,
-    )
-
-    return {"mission_uuid": str(mission.uuid), "status": mission.status}
-
-
 @router.get("")
 async def list_missions(
     current_user: User = Depends(get_current_user),
@@ -200,6 +108,41 @@ async def get_mission_detail(
     return {
         "mission": crud_missions.serialize_mission(mission),
         "ports": [crud_missions.serialize_port(p) for p in ports],
+        "findings": [crud_missions.serialize_finding(f) for f in findings],
+    }
+
+
+@router.get("/{mission_uuid}/findings")
+async def list_mission_findings(
+    mission_uuid: str,
+    port: Optional[int] = Query(None, description="Filter by port number"),
+    confirmed: Optional[bool] = Query(
+        None, description="Filter by confirmed flag (true/false)"
+    ),
+    limit: int = Query(50, ge=1, le=200, description="Max findings to return"),
+    offset: int = Query(0, ge=0, description="Findings to skip (pagination)"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Findings of a mission, filterable by port/confirmed and paginated.
+
+    Chronological order (oldest first), same as the detail endpoint.
+    """
+    mission = await _require_owned_mission(db, mission_uuid, current_user.uuid)
+    findings, total = await crud_missions.get_findings_filtered(
+        db,
+        mission.uuid,
+        port=port,
+        confirmed=confirmed,
+        limit=limit,
+        offset=offset,
+    )
+    return {
+        "mission_uuid": str(mission.uuid),
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "count": len(findings),
         "findings": [crud_missions.serialize_finding(f) for f in findings],
     }
 
@@ -341,3 +284,96 @@ async def mission_stream(
         pass
     finally:
         mission_runner.unsubscribe(mission_key, queue)
+
+
+@router.post("/v1/test/local")
+def local_run_mission(request: MissionRequest) -> dict:
+    try:
+        orchestrator = LocalOrchestrator(
+            target=request.target, user_prompt=request.prompt
+        )
+        result = orchestrator.run()
+
+        if "error" in result:
+            return JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content=get_mission_error(result["error"], request.target),
+            )
+
+        return {"status": "completed", "target": request.target, "data": result}
+
+    except Exception as e:
+        error_body = get_mission_error(e, request.target)
+
+        if "Connection" in type(e).__name__:
+            status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        else:
+            status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+
+        return JSONResponse(status_code=status_code, content=error_body)
+
+
+@router.post("/v1/test/hybrid")
+def hybrid_run_mission_v1(request: MissionRequest) -> dict:
+    try:
+        target = resolve_target_ip(request.target)
+        orchestrator = HybridOrchestratorV1(
+            target=target,
+            user_prompt=request.prompt
+        )
+        result = orchestrator.run()
+
+        if result.get("status") in ["failed", "error"]:
+
+            if result.get("source") == "google":
+                return JSONResponse(
+                    content=result["details"],
+                    status_code=result["code"]
+                )
+
+            return JSONResponse(
+                content=result,
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        return result
+    except Exception as e:
+        error_body = get_mission_error(e, request.target)
+
+        if "Connection" in type(e).__name__:
+            status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+        else:
+            status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+
+        return JSONResponse(status_code=status_code, content=error_body)
+
+
+@router.post("/v2/test/hybrid", status_code=status.HTTP_202_ACCEPTED)
+async def hybrid_run_mission_v2(
+    request: MissionRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Create the mission, return its uuid immediately, run it in the background."""
+    target_ip = resolve_target_ip(request.target)
+
+    mission = await crud_missions.create_mission(
+        db,
+        user_uid=current_user.uuid,
+        target=request.target,
+        target_ip=target_ip,
+        prompt=request.prompt,
+        version="v2",
+    )
+    await db.commit()
+
+    mission_runner.launch(
+        mission_uuid=mission.uuid,
+        target=request.target,
+        target_ip=target_ip,
+        prompt=request.prompt,
+        loop=asyncio.get_running_loop(),
+        resume=False,
+    )
+
+    return {"mission_uuid": str(mission.uuid), "status": mission.status}

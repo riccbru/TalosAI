@@ -318,3 +318,104 @@ async def test_request_cancel_sets_flag_or_reports_absent():
         assert mission_runner.request_cancel("does-not-exist") is False
     finally:
         mission_runner._cancel_events.pop(mid, None)
+
+
+# --- GET /{uuid}/findings: filtri + paginazione ---
+
+
+async def test_findings_endpoint_returns_all_with_metadata(
+    client, user_factory, mission_factory
+):
+    user = await user_factory()
+    mission = await mission_factory(
+        user,
+        findings=[
+            {"port": 21, "command": "a", "confirmed": True},
+            {"port": 22, "command": "b", "confirmed": False},
+            {"port": 22, "command": "c", "confirmed": False},
+        ],
+    )
+    resp = await client.get(f"{BASE}/{mission.uuid}/findings", headers=_auth(user))
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 3
+    assert body["count"] == 3
+    assert body["limit"] == 50 and body["offset"] == 0
+    assert len(body["findings"]) == 3
+
+
+async def test_findings_filter_by_port(client, user_factory, mission_factory):
+    user = await user_factory()
+    mission = await mission_factory(
+        user,
+        findings=[
+            {"port": 21, "command": "a"},
+            {"port": 22, "command": "b"},
+            {"port": 22, "command": "c"},
+        ],
+    )
+    resp = await client.get(
+        f"{BASE}/{mission.uuid}/findings?port=22", headers=_auth(user)
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 2
+    assert {f["port"] for f in body["findings"]} == {22}
+
+
+async def test_findings_filter_by_confirmed(client, user_factory, mission_factory):
+    user = await user_factory()
+    mission = await mission_factory(
+        user,
+        findings=[
+            {"port": 21, "command": "a", "confirmed": True},
+            {"port": 22, "command": "b", "confirmed": False},
+        ],
+    )
+    resp = await client.get(
+        f"{BASE}/{mission.uuid}/findings?confirmed=true", headers=_auth(user)
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 1
+    assert body["findings"][0]["confirmed"] is True
+
+
+async def test_findings_pagination(client, user_factory, mission_factory):
+    user = await user_factory()
+    mission = await mission_factory(
+        user,
+        findings=[{"port": 80, "command": f"cmd-{i}"} for i in range(5)],
+    )
+    resp = await client.get(
+        f"{BASE}/{mission.uuid}/findings?limit=2&offset=2", headers=_auth(user)
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total"] == 5
+    assert body["count"] == 2
+    assert body["limit"] == 2 and body["offset"] == 2
+    assert body["findings"][0]["command"] == "cmd-2"  # chronological (id asc)
+
+
+async def test_findings_of_other_users_mission_is_404(
+    client, user_factory, mission_factory
+):
+    owner = await user_factory(email="fo@example.com")
+    intruder = await user_factory(email="fi@example.com")
+    mission = await mission_factory(owner, findings=[{"port": 21, "command": "a"}])
+    resp = await client.get(f"{BASE}/{mission.uuid}/findings", headers=_auth(intruder))
+    assert resp.status_code == 404
+
+
+async def test_findings_invalid_limit_is_422(client, user_factory, mission_factory):
+    user = await user_factory()
+    mission = await mission_factory(user)
+    too_big = await client.get(
+        f"{BASE}/{mission.uuid}/findings?limit=999", headers=_auth(user)
+    )
+    assert too_big.status_code == 422
+    zero = await client.get(
+        f"{BASE}/{mission.uuid}/findings?limit=0", headers=_auth(user)
+    )
+    assert zero.status_code == 422

@@ -2,7 +2,7 @@ import uuid as uuid_lib
 from datetime import datetime, timezone
 from typing import List, Optional, Union
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.missions import (
@@ -79,6 +79,36 @@ async def get_findings(db: AsyncSession, mission_uuid: UUIDLike) -> List[Finding
     )
     result = await db.execute(stmt)
     return list(result.scalars().all())
+
+
+async def get_findings_filtered(
+    db: AsyncSession,
+    mission_uuid: UUIDLike,
+    *,
+    port: Optional[int] = None,
+    confirmed: Optional[bool] = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> tuple[List[Finding], int]:
+    """Return (page of findings, total matching count), chronological order."""
+    filters = [Finding.mission_uid == _as_uuid(mission_uuid)]
+    if port is not None:
+        filters.append(Finding.port == port)
+    if confirmed is not None:
+        filters.append(Finding.confirmed == confirmed)
+
+    total = await db.scalar(
+        select(func.count()).select_from(Finding).where(*filters)
+    )
+    stmt = (
+        select(Finding)
+        .where(*filters)
+        .order_by(Finding.created_at.asc(), Finding.id.asc())
+        .offset(offset)
+        .limit(limit)
+    )
+    result = await db.execute(stmt)
+    return list(result.scalars().all()), int(total or 0)
 
 
 async def set_discovered(
