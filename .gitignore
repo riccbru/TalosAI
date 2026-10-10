@@ -25,4 +25,4 @@ database/init/*.sql
 # Misc
 .DS_Store
 /img/
-markdowns/*.md
+markdowns/

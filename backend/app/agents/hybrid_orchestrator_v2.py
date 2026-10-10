@@ -9,8 +9,18 @@ from pydantic import BaseModel, Field
 
 from app.agents.mission_exceptions import MissionCancelled  # noqa: F401 (re-export)
 from app.agents.tester import get_tester_agent
-from app.agents.tools import kali_tool
+from app.agents.tools import kali_lhost, kali_tool
 from app.core.config import settings
+
+# Evidence that a command actually achieved access/execution on the target.
+_CONFIRM_PATTERNS = [
+    r"session \d+ opened",
+    r"meterpreter session \d+ opened",
+    r"command shell session \d+ opened",
+    r"\buid=\d+\(",                 # output of `id`
+    r"backdoor has been spawned",
+    r"login successful",
+]
 
 
 gemini_client = genai.Client()
@@ -97,6 +107,29 @@ class HybridOrchestratorV2:
     def _check_cancel(self) -> None:
         if self._should_cancel():
             raise MissionCancelled()
+
+    @staticmethod
+    def _with_lhost(command: str) -> str:
+        """Inject `setg LHOST <kali_ip>` into msfconsole commands so reverse
+        payloads always validate. The injected command is what gets stored in the
+        finding too, so it stays copy-paste reproducible."""
+        if "msfconsole" not in command or "LHOST" in command:
+            return command
+        ip = kali_lhost()
+        if not ip:
+            return command
+        prefix = f"setg LHOST {ip}; "
+        new, n = re.subn(
+            r'(-x\s+)(["\'])', lambda m: m.group(1) + m.group(2) + prefix,
+            command, count=1,
+        )
+        return new if n else command
+
+    @staticmethod
+    def _looks_confirmed(output: str) -> bool:
+        """Best-effort: did the command show real access/execution evidence?"""
+        text = output or ""
+        return any(re.search(p, text, re.IGNORECASE) for p in _CONFIRM_PATTERNS)
 
     # def _execute_micro_task(
     #     self, command_to_run: str, expected_description: str
@@ -279,14 +312,17 @@ class HybridOrchestratorV2:
                     continue
 
                 if decision["specific_command"]:
+                    # LHOST injected here so BOTH the executed command and the
+                    # stored finding command are identical and copy-paste runnable.
+                    command = self._with_lhost(decision["specific_command"])
                     cmd_output = self._execute_micro_task(
-                        command_to_run=decision["specific_command"],
+                        command_to_run=command,
                         expected_description=f"Testing vulnerability on port {port}",  # noqa: E501
                     )
 
                     history_of_this_port.append(
                         {
-                            "command_sent": decision["specific_command"],
+                            "command_sent": command,
                             "terminal_output": cmd_output[:2000],
                         }
                     )
@@ -298,10 +334,10 @@ class HybridOrchestratorV2:
                             "port": port,
                             "service_name": name,
                             "action": decision["action"],
-                            "command": decision["specific_command"],
+                            "command": command,
                             "output": cmd_output[:4000],
                             "reasoning": decision["reasoning"],
-                            "confirmed": False,
+                            "confirmed": self._looks_confirmed(cmd_output),
                         }
                     )
                     self.reporter.port_status(

@@ -63,4 +63,18 @@ class KaliTerminalTool(BaseTool):
             return f"Error executing command: {str(e)}"
 
 
+def kali_lhost() -> str | None:
+    """Kali's current IP on the target network — the correct LHOST for reverse
+    shells. Detected live (not cached) so it's always right even if Docker
+    reassigns the address across restarts."""
+    try:
+        client = docker.from_env()
+        kali = client.containers.get("talos_kali")
+        nets = kali.attrs["NetworkSettings"]["Networks"]
+        net = nets.get("talos_network") or next(iter(nets.values()), None)
+        return net.get("IPAddress") if net else None
+    except Exception:
+        return None
+
+
 kali_tool = KaliTerminalTool()

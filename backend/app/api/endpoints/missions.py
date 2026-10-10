@@ -73,6 +73,16 @@ def resolve_target_ip(target: str) -> str:
     return target
 
 
+def scan_host(target: str) -> str:
+    """Hostname actually used in the scan commands. Returns a Docker DNS name
+    (resolved live by Kali) rather than a frozen IP, so the mission always hits
+    the right container even if Docker reshuffles addresses across restarts.
+    `resolve_target_ip` is kept only to record target_ip for reference."""
+    if target.strip().lower() == "metasploitable":
+        return "talos_metasploitable"
+    return target
+
+
 @router.get("")
 async def list_missions(
     current_user: User = Depends(get_current_user),
@@ -253,8 +263,7 @@ async def hybrid_run_mission_v2(
 
     mission_runner.launch(
         mission_uuid=mission.uuid,
-        target=request.target,
-        target_ip=target_ip,
+        scan_target=scan_host(request.target),
         prompt=request.prompt,
         loop=asyncio.get_running_loop(),
         resume=False,
@@ -297,12 +306,9 @@ async def resume_mission(
             ),
         )
 
-    target_ip = mission.target_ip or resolve_target_ip(mission.target)
-
     mission_runner.launch(
         mission_uuid=mission.uuid,
-        target=mission.target,
-        target_ip=target_ip,
+        scan_target=scan_host(mission.target),
         prompt=mission.prompt,
         loop=asyncio.get_running_loop(),
         resume=True,

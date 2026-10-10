@@ -202,8 +202,7 @@ def _load_services(mission_uuid: str, loop: asyncio.AbstractEventLoop) -> List[d
 
 def _worker(
     mission_uuid: str,
-    target: str,
-    target_ip: Optional[str],
+    scan_target: str,
     prompt: Optional[str],
     loop: asyncio.AbstractEventLoop,
     resume: bool,
@@ -217,7 +216,7 @@ def _worker(
         reporter.mission_status("running")
         initial_services = _load_services(mission_uuid, loop) if resume else None
         orchestrator = HybridOrchestratorV2(
-            target=target_ip or target,
+            target=scan_target,
             user_prompt=prompt,
             reporter=reporter,
             initial_services=initial_services,
@@ -239,8 +238,7 @@ def _worker(
 def launch(
     *,
     mission_uuid,
-    target: str,
-    target_ip: Optional[str],
+    scan_target: str,
     prompt: Optional[str],
     loop: asyncio.AbstractEventLoop,
     resume: bool = False,
@@ -251,7 +249,7 @@ def launch(
         _cancel_events[key] = cancel_event
     thread = threading.Thread(
         target=_worker,
-        args=(key, target, target_ip, prompt, loop, resume, cancel_event),
+        args=(key, scan_target, prompt, loop, resume, cancel_event),
         name=f"mission-{mission_uuid}",
         daemon=True,
     )

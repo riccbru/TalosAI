@@ -129,6 +129,26 @@ async def test_launch_requires_auth(client):
     assert resp.status_code == 401
 
 
+async def test_launch_scans_hostname_for_metasploitable(
+    client, user_factory, no_launch
+):
+    user = await user_factory()
+    resp = await client.post(
+        f"{BASE}/v2/test/hybrid",
+        json={"target": "metasploitable", "prompt": "x"},
+        headers=_auth(user),
+    )
+    assert resp.status_code == 202
+    # the orchestrator scans the stable Docker DNS name, not a frozen IP
+    assert no_launch[0]["scan_target"] == "talos_metasploitable"
+
+
+async def test_scan_host_mapping():
+    assert missions_module.scan_host("metasploitable") == "talos_metasploitable"
+    assert missions_module.scan_host("  Metasploitable ") == "talos_metasploitable"
+    assert missions_module.scan_host("scanme.nmap.org") == "scanme.nmap.org"
+
+
 # --- list + detail (ownership scoped) ---
 
 
