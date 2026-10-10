@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, Index, Integer, String
 from sqlalchemy.dialects.postgresql import ENUM, UUID
 
 from app.db.base import Base
@@ -32,10 +32,9 @@ class User(Base):
     uuid = Column(
         UUID(as_uuid=True),
         default=uuid.uuid4,
-        nullable=False,
         unique=True
     )
-    email = Column(String(255), nullable=False, unique=True, index=True)
+    email = Column(String(255), nullable=False, unique=True)
     hashed_password = Column(String(255), nullable=False)
     role = Column(user_role_enum, default=UserRole.user.value)
     is_active = Column(Boolean, default=True)
@@ -51,3 +50,7 @@ class User(Base):
         nullable=False,
     )
     password_changed_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        Index("ix_users_email", "email"),
+    )
