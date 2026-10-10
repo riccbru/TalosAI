@@ -16,10 +16,10 @@ from app.core.config import settings
 gemini_client = genai.Client()
 
 # Gemini free tier allows ~15 requests/min per model. Stay safely under that with a
-# client-side throttle, and retry on 429 (RESOURCE_EXHAUSTED) instead of letting it
-# bubble up as a 500. ~4.5s spacing => <14 calls/min.
+# client-side throttle, and retry on transient errors (429 rate limit, 503/500 server
+# spikes) with backoff instead of letting them fail the mission. ~4.5s spacing => <14/min.
 _MIN_SECONDS_BETWEEN_CALLS = 4.5
-_MAX_RETRIES_ON_429 = 5
+_MAX_RETRIES = 5
 _last_call_ts = 0.0
 
 
@@ -149,12 +149,23 @@ class HybridOrchestratorV2:
         except Exception as e:
             msg = str(e)
             is_rate_limit = "429" in msg or "RESOURCE_EXHAUSTED" in msg
-            if is_rate_limit and _retry < _MAX_RETRIES_ON_429:
-                delay = self._parse_retry_delay(msg)
+            is_transient_server = (
+                "503" in msg or "UNAVAILABLE" in msg
+                or "500" in msg or "INTERNAL" in msg
+            )
+            if (is_rate_limit or is_transient_server) and _retry < _MAX_RETRIES:
+                if is_rate_limit:
+                    # 429 carries a precise retryDelay from Google; honor it.
+                    delay = self._parse_retry_delay(msg)
+                    reason = "rate limit (429)"
+                else:
+                    # 503/500 carry no retryDelay: exponential backoff 2,4,8,16,32..60s.
+                    delay = min(2.0 * (2 ** _retry), 60.0)
+                    reason = "transient server error (503/500)"
                 self._emit_log(
                     "Manager",
-                    f"Gemini rate limit hit; backing off {delay:.0f}s "
-                    f"(retry {_retry + 1}/{_MAX_RETRIES_ON_429})...",
+                    f"Gemini {reason}; backing off {delay:.0f}s "
+                    f"(retry {_retry + 1}/{_MAX_RETRIES})...",
                 )
                 time.sleep(delay)
                 return self._generate(prompt, schema, _retry=_retry + 1)
