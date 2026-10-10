@@ -212,15 +212,15 @@ class HybridOrchestratorV2:
             _last_call_ts = time.monotonic()
 
     def _discover_services(self) -> List[dict]:
-        """Run nmap, parse it, and return per-port working state (fresh run)."""
+        """Run nmap on all ports, parse it, and return per-port working state (fresh run)."""
         self._check_cancel()
         self._emit_log(
             "Manager",
-            f"Starting initial service discovery scan on {self.target}...",
+            f"Starting comprehensive service discovery scan on {self.target}...",
         )
         raw_nmap_output = self._execute_micro_task(
-            command_to_run=f"nmap -sV -sC -F {self.target}",
-            expected_description="Initial fast service verification scan.",
+            command_to_run=f"nmap -sV -sC -p- {self.target}",
+            expected_description="Comprehensive service verification scan on all 65536 ports.",
         )
 
         self._emit_log("Manager", "Parsing raw Nmap output with Gemini...")
