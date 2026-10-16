@@ -9,6 +9,8 @@ jobs:
   deploy:
     name: Build and Deploy
     runs-on: [self-hosted, TalosAI]
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout repository
