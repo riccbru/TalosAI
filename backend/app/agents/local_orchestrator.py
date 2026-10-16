@@ -9,6 +9,7 @@ from app.agents.reporter import get_reporter_agent
 from app.agents.scanner import get_scanner_agent
 from app.agents.summarizer import get_summarizer_agent
 from app.agents.tester import get_tester_agent
+from app.core import errors
 from app.core.status import _utc_now
 
 
@@ -204,13 +205,12 @@ class LocalOrchestrator:
             result = talos_crew.kickoff()
             return self._extract_json(str(result))
         except json.JSONDecodeError as e:
-            return {
-                "error": "reporter_json_parse_failed",
-                "detail": str(e),
-                "raw": str(result),
-            }
+            # Keep the raw detail server-side only; never return it to clients.
+            errors.log_detail("LocalOrchestrator reporter JSON parse failed", e)
+            return {"error": "reporter_json_parse_failed"}
         except Exception as e:
-            return {"error": "pipeline_failed", "detail": str(e)}
+            errors.log_detail("LocalOrchestrator pipeline failed", e)
+            return {"error": "pipeline_failed"}
 
     @staticmethod
     def _extract_json(raw: str) -> dict:

@@ -12,12 +12,12 @@ from fastapi import (
     WebSocketDisconnect,
     status,
 )
-from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.hybrid_orchestrator_v1 import HybridOrchestratorV1
 from app.agents.local_orchestrator import LocalOrchestrator
 from app.api.deps import get_current_user
+from app.core import errors
 from app.core.security import decode_access_token
 from app.crud import crud_missions
 from app.db.session import AsyncSessionLocal, get_db
@@ -29,27 +29,6 @@ from app.services import mission_runner
 
 router = APIRouter()
 ws_router = APIRouter()  # mounted WITHOUT the HTTP auth dependency (see main.py)
-
-
-def get_mission_error(e: Exception, target: str) -> dict:
-    error_type = type(e).__name__
-
-    if "APIConnectionError" in error_type or "ConnectionError" in error_type:
-        error_code = "PROVIDER_UNREACHABLE"
-        msg = "Could not connect to the AI model provider (Ollama)"
-    elif "ValidationError" in error_type:
-        error_code = "CONFIG_ERROR"
-        msg = "Invalid agent or task configuration."
-    else:
-        error_code = "ORCHESTRATION_FAILED"
-        msg = str(e.args[-1]) if e.args else str(e)
-
-    return {
-        "status": "failed",
-        "target": target,
-        "error_code": error_code,
-        "details": {"type": error_type, "message": msg},
-    }
 
 
 def resolve_target_ip(target: str) -> str:
@@ -189,22 +168,16 @@ def local_run_mission(request: MissionRequest) -> dict:
         result = orchestrator.run()
 
         if "error" in result:
-            return JSONResponse(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                content=get_mission_error(result["error"], request.target),
+            return errors.handle_failure_result(
+                result, "local_run_mission", target=request.target
             )
 
         return {"status": "completed", "target": request.target, "data": result}
 
     except Exception as e:
-        error_body = get_mission_error(e, request.target)
-
-        if "Connection" in type(e).__name__:
-            status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-        else:
-            status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-
-        return JSONResponse(status_code=status_code, content=error_body)
+        return errors.handle_exception(
+            e, "local_run_mission", target=request.target
+        )
 
 
 @router.post("/v1/test/hybrid")
@@ -218,28 +191,24 @@ def hybrid_run_mission_v1(request: MissionRequest) -> dict:
         result = orchestrator.run()
 
         if result.get("status") in ["failed", "error"]:
-
+            # Upstream (Gemini) failures carry a meaningful HTTP status we want
+            # to surface; the body was already sanitized by the orchestrator.
             if result.get("source") == "google":
-                return JSONResponse(
-                    content=result["details"],
-                    status_code=result["code"]
+                return errors.error_response(
+                    errors.ErrorCode.UPSTREAM_ERROR,
+                    target=request.target,
+                    status_code=result.get("code"),
                 )
 
-            return JSONResponse(
-                content=result,
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            return errors.handle_failure_result(
+                result, "hybrid_run_mission_v1", target=request.target
             )
 
         return result
     except Exception as e:
-        error_body = get_mission_error(e, request.target)
-
-        if "Connection" in type(e).__name__:
-            status_code = status.HTTP_503_SERVICE_UNAVAILABLE
-        else:
-            status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
-
-        return JSONResponse(status_code=status_code, content=error_body)
+        return errors.handle_exception(
+            e, "hybrid_run_mission_v1", target=request.target
+        )
 
 
 @router.post("/v2/test/hybrid", status_code=status.HTTP_202_ACCEPTED)

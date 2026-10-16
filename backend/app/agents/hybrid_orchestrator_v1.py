@@ -5,6 +5,7 @@ from crewai import Crew, Process, Task
 from google import genai
 
 from app.agents.tester import get_tester_agent
+from app.core import errors
 from app.core.config import settings
 
 
@@ -149,23 +150,32 @@ class HybridOrchestratorV1:
             try:
                 validated_json = json.loads(response_critic.text)
             except json.JSONDecodeError as e:
+                errors.log_detail(
+                    "HybridOrchestratorV1 critic returned non-JSON response",
+                    {"error": e, "raw": response_critic.text},
+                )
                 return {
                     "status": "failed",
                     "source": "critic_parse",
-                    "message": f"Gemini returned non-JSON response: {e}",
-                    "raw": response_critic.text,
+                    "message": "Gemini returned a non-JSON response.",
                 }
             except TypeError as e:
+                errors.log_detail(
+                    "HybridOrchestratorV1 critic returned invalid data type", e
+                )
                 return {
                     "status": "failed",
                     "source": "critic_type_error",
-                    "message": f"Invalid data type received from Critic: {e}",
+                    "message": "Invalid data type received from Critic.",
                 }
             except Exception as e:
+                errors.log_detail(
+                    "HybridOrchestratorV1 critic JSON validation failed", e
+                )
                 return {
                     "status": "failed",
                     "source": "critic_generic_error",
-                    "message": f"Unexpected error during JSON validation: {str(e)}",
+                    "message": "Unexpected error during Critic validation.",
                 }
 
             self._emit_log("Critic", "Audit completed successfully", "success")
@@ -177,8 +187,11 @@ class HybridOrchestratorV1:
             }
 
         except genai.errors.APIError as e:
-            print(f"[TALOSAI_LOG] [GOOGLE_ERROR] {e.code} - {e.message}")
-
+            # Log the upstream provider's own message/code server-side only.
+            errors.log_detail(
+                "HybridOrchestratorV1 Gemini API error",
+                {"code": e.code, "message": e.message},
+            )
             return {
                 "code": e.code,
                 "status": "failed",
@@ -186,15 +199,17 @@ class HybridOrchestratorV1:
                 "details": {
                     "code": e.code,
                     "status": getattr(e, "status", "failed"),
-                    "message": e.message,
-                }
+                    "message": errors.CLIENT_MESSAGES[errors.ErrorCode.UPSTREAM_ERROR],
+                },
             }
 
         except Exception as e:
-            # self._emit_log("Error", f"Error during execution: {str(e)}", "failed")
+            errors.log_detail("HybridOrchestratorV1 execution failed", e)
             return {
                 "code": 500,
                 "status": "error",
                 "source": "generic",
-                "message": str(e)
+                "message": errors.CLIENT_MESSAGES[
+                    errors.ErrorCode.ORCHESTRATION_FAILED
+                ],
             }
