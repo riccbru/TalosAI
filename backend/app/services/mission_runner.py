@@ -148,6 +148,49 @@ class DBReporter:
             print(f"[mission_runner] persist mission status failed: {e}", flush=True)
         self._publish({"type": "mission_status", "status": status, "error": error})
 
+    def record_usage(
+        self,
+        agent: str,
+        model: str,
+        provider: str,
+        prompt_tokens: int,
+        completion_tokens: int,
+        total_tokens: int,
+        latency_seconds: float,
+    ) -> None:
+        """Accumulate one LLM call's usage for `agent`. Never kills the mission.
+
+        Emits a lightweight WS event carrying both the single-call delta and the
+        cumulative totals (per agent + mission), so a live UI can show an
+        absolute counter that stays correct across reconnects.
+        """
+        cumulative: dict = {}
+        try:
+            cumulative = self._run(
+                self._persist_usage(
+                    agent, model, provider,
+                    prompt_tokens, completion_tokens, total_tokens, latency_seconds,
+                )
+            )
+        except Exception as e:  # noqa: BLE001 - telemetry must never fail a mission
+            print(f"[mission_runner] persist usage failed: {e}", flush=True)
+        self._publish(
+            {
+                "type": "usage",
+                "agent": agent,
+                "model": model,
+                "provider": provider,
+                "delta": {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens,
+                    "latency_seconds": round(latency_seconds, 3),
+                },
+                "agent_usage": cumulative.get("agent_usage", {}),
+                "metrics": cumulative.get("metrics", {}),
+            }
+        )
+
     # --- persistence coroutines (each uses its own session on the loop) ---
 
     async def _persist_services(self, services: List[dict]) -> None:
@@ -179,6 +222,43 @@ class DBReporter:
                 db, self.mission_uuid, status, error=error
             )
             await db.commit()
+
+    async def _persist_usage(
+        self,
+        agent: str,
+        model: str,
+        provider: str,
+        prompt_tokens: int,
+        completion_tokens: int,
+        total_tokens: int,
+        latency_seconds: float,
+    ) -> dict:
+        async with AsyncSessionLocal() as db:
+            await crud_missions.add_model_usage(
+                db,
+                self.mission_uuid,
+                agent=agent,
+                model=model,
+                provider=provider,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                latency_seconds=latency_seconds,
+            )
+            await db.commit()
+            # Re-read the cumulative state (fresh SELECT, attributes loaded) so
+            # the WS event can carry absolute counters, not just the delta.
+            rows = await crud_missions.get_model_usage(db, self.mission_uuid)
+            agent_row = next((r for r in rows if r.agent == agent), None)
+            return {
+                "agent_usage": (
+                    crud_missions.serialize_model_usage(agent_row)["usage"]
+                    if agent_row
+                    else {}
+                ),
+                # No mission passed -> no duration keys: keeps the event light.
+                "metrics": crud_missions.aggregate_metrics(rows),
+            }
 
 
 def _load_services(mission_uuid: str, loop: asyncio.AbstractEventLoop) -> List[dict]:

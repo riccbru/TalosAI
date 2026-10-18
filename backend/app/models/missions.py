@@ -7,10 +7,12 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
@@ -131,3 +133,38 @@ class Finding(Base):
     reasoning = Column(Text, nullable=True)
     confirmed = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+
+
+class MissionModelUsage(Base):
+    """Per-agent LLM usage, accumulated over the whole mission.
+
+    Provider-agnostic: `provider` records who served the call (ollama, gemini,
+    openai, anthropic, ...) and token counts are normalized to the same three
+    fields no matter the provider. One row per (mission, agent); counters are
+    incremented on every call via `crud_missions.add_model_usage`.
+    """
+
+    __tablename__ = "mission_model_usage"
+    __table_args__ = (
+        UniqueConstraint("mission_uid", "agent", name="uq_mission_agent"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    mission_uid = Column(
+        UUID(as_uuid=True),
+        ForeignKey("missions.uuid", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    agent = Column(String, nullable=False)
+    model = Column(String, nullable=False)
+    provider = Column(String, nullable=False)
+    prompt_tokens = Column(Integer, default=0, nullable=False)
+    completion_tokens = Column(Integer, default=0, nullable=False)
+    total_tokens = Column(Integer, default=0, nullable=False)
+    call_count = Column(Integer, default=0, nullable=False)
+    total_latency_seconds = Column(Float, default=0.0, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True), default=_utcnow, onupdate=_utcnow, nullable=False
+    )

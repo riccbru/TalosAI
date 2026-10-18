@@ -123,11 +123,14 @@ async def mission_stream(
                 return
             ports = await crud_missions.get_ports(db, mission_key)
             findings = await crud_missions.get_findings(db, mission_key)
+            usage_rows = await crud_missions.get_model_usage(db, mission_key)
             snapshot = {
                 "type": "snapshot",
                 "mission": crud_missions.serialize_mission(mission),
                 "ports": [crud_missions.serialize_port(p) for p in ports],
                 "findings": [crud_missions.serialize_finding(f) for f in findings],
+                "models": crud_missions.serialize_models_map(usage_rows),
+                "metrics": crud_missions.aggregate_metrics(usage_rows, mission),
             }
             terminal = mission.status in (
                 "completed",
@@ -250,10 +253,13 @@ async def get_mission_detail(
     mission = await _require_owned_mission(db, mission_uuid, current_user.uuid)
     ports = await crud_missions.get_ports(db, mission.uuid)
     findings = await crud_missions.get_findings(db, mission.uuid)
+    usage_rows = await crud_missions.get_model_usage(db, mission.uuid)
     return {
         "mission": crud_missions.serialize_mission(mission),
         "ports": [crud_missions.serialize_port(p) for p in ports],
         "findings": [crud_missions.serialize_finding(f) for f in findings],
+        "models": crud_missions.serialize_models_map(usage_rows),
+        "metrics": crud_missions.aggregate_metrics(usage_rows, mission),
     }
 
 

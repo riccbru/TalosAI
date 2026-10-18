@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.missions import (
     Finding,
     Mission,
+    MissionModelUsage,
     MissionPort,
     TERMINAL_STATUSES,
 )
@@ -181,6 +182,63 @@ async def add_finding(
     return finding
 
 
+async def add_model_usage(
+    db: AsyncSession,
+    mission_uuid: UUIDLike,
+    *,
+    agent: str,
+    model: str,
+    provider: str,
+    prompt_tokens: int,
+    completion_tokens: int,
+    total_tokens: int,
+    latency_seconds: float,
+) -> None:
+    """Accumulate one LLM call into the (mission, agent) usage row (upsert)."""
+    mid = _as_uuid(mission_uuid)
+    stmt = select(MissionModelUsage).where(
+        MissionModelUsage.mission_uid == mid,
+        MissionModelUsage.agent == agent,
+    )
+    row = (await db.execute(stmt)).scalar_one_or_none()
+    if row is None:
+        db.add(
+            MissionModelUsage(
+                mission_uid=mid,
+                agent=agent,
+                model=model,
+                provider=provider,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                call_count=1,
+                total_latency_seconds=latency_seconds,
+            )
+        )
+    else:
+        row.prompt_tokens += prompt_tokens
+        row.completion_tokens += completion_tokens
+        row.total_tokens += total_tokens
+        row.call_count += 1
+        row.total_latency_seconds += latency_seconds
+        # Keep the most recently seen model/provider for this agent.
+        row.model = model
+        row.provider = provider
+    await db.flush()
+
+
+async def get_model_usage(
+    db: AsyncSession, mission_uuid: UUIDLike
+) -> List[MissionModelUsage]:
+    stmt = (
+        select(MissionModelUsage)
+        .where(MissionModelUsage.mission_uid == _as_uuid(mission_uuid))
+        .order_by(MissionModelUsage.id.asc())
+    )
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
 async def update_mission_status(
     db: AsyncSession,
     mission_uuid: UUIDLike,
@@ -247,3 +305,59 @@ def serialize_finding(finding: Finding) -> dict:
         "confirmed": finding.confirmed,
         "created_at": _iso(finding.created_at),
     }
+
+
+def _hms(seconds: float) -> str:
+    """Seconds -> 'hh:mm:ss'."""
+    total = int(max(0.0, seconds))
+    hours, rem = divmod(total, 3600)
+    minutes, secs = divmod(rem, 60)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+
+def _mission_duration(mission: Mission) -> tuple[Optional[float], Optional[str]]:
+    """Wall-clock from created_at to finished_at (or now, if still running)."""
+    if mission.created_at is None:
+        return None, None
+    end = mission.finished_at or datetime.now(timezone.utc)
+    seconds = max(0.0, (end - mission.created_at).total_seconds())
+    return round(seconds, 3), _hms(seconds)
+
+
+def serialize_model_usage(row: MissionModelUsage) -> dict:
+    return {
+        "model": row.model,
+        "provider": row.provider,
+        "usage": {
+            "prompt_tokens": row.prompt_tokens,
+            "completion_tokens": row.completion_tokens,
+            "total_tokens": row.total_tokens,
+            "call_count": row.call_count,
+            "total_latency_seconds": round(row.total_latency_seconds, 3),
+        },
+    }
+
+
+def serialize_models_map(rows: List[MissionModelUsage]) -> dict:
+    """{agent: {model, provider, usage{...}}} — the per-agent breakdown block."""
+    return {row.agent: serialize_model_usage(row) for row in rows}
+
+
+def aggregate_metrics(
+    rows: List[MissionModelUsage], mission: Optional[Mission] = None
+) -> dict:
+    """Totals across every agent, plus optional mission duration."""
+    metrics = {
+        "total_prompt_tokens": sum(r.prompt_tokens for r in rows),
+        "total_completion_tokens": sum(r.completion_tokens for r in rows),
+        "total_tokens": sum(r.total_tokens for r in rows),
+        "total_llm_calls": sum(r.call_count for r in rows),
+        "total_latency_seconds": round(
+            sum(r.total_latency_seconds for r in rows), 3
+        ),
+    }
+    if mission is not None:
+        duration_seconds, duration_hms = _mission_duration(mission)
+        metrics["duration_seconds"] = duration_seconds
+        metrics["duration"] = duration_hms
+    return metrics

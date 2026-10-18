@@ -4,5 +4,6 @@ from app.models.sessions import UserSession  # noqa: F401
 from app.models.missions import (  # noqa: F401
     Finding,
     Mission,
+    MissionModelUsage,
     MissionPort,
 )

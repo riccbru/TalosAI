@@ -43,7 +43,10 @@ TalosAI is a sovereign, self-hosted penetration testing agent designed for autom
 
 [![PostgreSQL][postgres-img]][postgres-url] [![SQLAlchemy][sqlalchemy-img]][sqlalchemy-url] [![Alembic][alembic-img]][alembic-url]
 
-[![Docker][docker-img]][docker-url] [![Docker Compose][docker-compose-img]][docker-compose-url] [![Gitlab CI][gitlab-ci-img]][gitlab-ci-url] 
+<!-- [![Docker][docker-img]][docker-url] [![Docker Compose][docker-compose-img]][docker-compose-url] [![Gitlab CI][gitlab-ci-img]][gitlab-ci-url]  -->
+[![Docker][docker-img]][docker-url] [![Docker Compose][docker-compose-img]][docker-compose-url] [![GitHub Actions][github-actions-img]][github-actions-url]
+
+[![Kali Linux][kali-img]][kali-url] [![Metasploitable][metasploitable-img]][metasploitable-url]
 
 <p align="right">(<a href="#readme-top">back to top ↑</a>)</p>
 
@@ -146,3 +149,12 @@ Project Link: [https://github.com/riccbru/TalosAI](https://github.com/riccbru/Ta
 
 [gitlab-ci-url]: https://docs.gitlab.com/ee/ci/
 [gitlab-ci-img]: https://img.shields.io/badge/GitLab_CI/CD-FC6D26?style=for-the-badge&logo=gitlab&logoColor=white
+
+[github-actions-url]: https://github.com/riccbru/TalosAI/actions
+[github-actions-img]: https://img.shields.io/badge/GitHub_Actions-000000?style=for-the-badge&logo=githubactions&logoColor=white
+
+[kali-url]: https://www.kali.org/
+[kali-img]: https://img.shields.io/badge/Kali_Linux-1E8CDC?style=for-the-badge&logo=kalilinux&logoColor=white
+
+[metasploitable-url]: https://docs.rapid7.com/metasploit/metasploitable-2/
+[metasploitable-img]: https://img.shields.io/badge/Metasploitable-2A7AB0?style=for-the-badge&logo=metasploit&logoColor=white
