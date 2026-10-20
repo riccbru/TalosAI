@@ -50,7 +50,7 @@ Once the server is running, you can access the interactive Swagger UI at [http:/
 ## Key Capabilities & Empirical Results
 
 > ⚠️ **Data to populate** — the figures in this section must be filled from the
-> latest real mission export (`last_mission_results.json`). Placeholders are
+> latest real mission export (`last_hybrid_mission_results.json`). Placeholders are
 > written as `‹…›` so they are never mistaken for measured values. The *columns
 > and structure* below are final and match the live API schema.
 

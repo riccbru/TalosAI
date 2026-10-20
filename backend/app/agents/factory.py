@@ -1,6 +1,15 @@
+import litellm
 from crewai import LLM
 
 from app.core.config import settings
+
+# CrewAI 1.15 forwards LLM init kwargs down to the provider completion call. The
+# Ollama-only `num_ctx` ends up reaching the OpenAI-compatible
+# `Completions.create()`, which rejects it ("unexpected keyword argument
+# 'num_ctx'") and hangs the synchronous V1 hybrid endpoint. Letting litellm drop
+# params a given endpoint does not accept keeps `num_ctx` effective on native
+# Ollama calls while never crashing the CrewAI pipeline.
+litellm.drop_params = True
 
 
 def get_llm_for_agent(agent_key: str) -> LLM:

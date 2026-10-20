@@ -37,26 +37,20 @@ Initiates a security assessment campaign managed exclusively by the internal pro
      | `prompt` | string | Yes      | Custom instructions or context guiding the AI agent behavior   |
 
 ### Response
-- **200 OK** — synchronous; returns the final structured report produced by the pipeline:
+- **202 Accepted** — the mission is created and executes asynchronously on a background worker (same contract as the hybrid endpoints, so all three orchestrators are directly comparable):
   ```json
   {
-    "status": "completed",
-    "target": "255.255.255.255",
-    "data": {
-      "executive_summary": "…",
-      "findings": [],
-      "rejected_findings": [],
-      "recommendations": [],
-      "confidence_score": 0.0
-    }
+    "mission_uuid": "ffffffff-ffff-4fff-afff-ffffffffffff",
+    "status": "pending"
   }
   ```
 
-  | Field    | Type   | Description                                              |
-  |----------|:------:|----------------------------------------------------------|
-  | `status` | string | `completed`, or an error code on failure                 |
-  | `target` | string | Echo of the requested target                             |
-  | `data`   | object | Validated report (summary, findings, recommendations, confidence score) |
+  | Field          | Type          | Description                                             |
+  |----------------|:-------------:|---------------------------------------------------------|
+  | `mission_uuid` | string (uuid) | Identifier used to poll results or open the live stream |
+  | `status`       | string        | Initial mission status (`pending`)                      |
+
+  Retrieve the full result with [`GET /{mission_uuid}`](#get-mission), or stream progress live over the WebSocket `/ws/{mission_uuid}`. The persisted mission carries `orchestrator_version: "local"`; findings hold the Critic-validated analysis (no executed per-finding `command`/`output`) and token usage is tracked as one aggregate `local_pipeline` entry (CrewAI reports usage in aggregate, not per sub-agent).
 
 ### Example
 ```bash

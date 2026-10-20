@@ -1,30 +1,138 @@
 import json
-from typing import Optional
+import time
+from typing import List, Optional
 
 from crewai import Crew, Process, Task
 
 from app.agents.critic import get_critic_agent
+# Read-only reuse of V2's default sink. Importing it does NOT modify V2.
+from app.agents.hybrid_orchestrator_v2 import NoOpReporter
+from app.agents.mission_exceptions import MissionCancelled
 from app.agents.planner import get_planner_agent
 from app.agents.reporter import get_reporter_agent
 from app.agents.scanner import get_scanner_agent
 from app.agents.summarizer import get_summarizer_agent
 from app.agents.tester import get_tester_agent
+from app.agents.usage import extract_usage  # noqa: F401 (kept for symmetry/future use)
 from app.core import errors
+from app.core.config import settings  # noqa: F401 (kept for symmetry/future use)
 from app.core.status import _utc_now
 
 
 class LocalOrchestrator:
-    def __init__(self, target: str, user_prompt: Optional[str] = None):
+    """Air-gapped CrewAI pipeline (Planner -> Scanner -> Tester -> Summarizer ->
+    Critic -> Reporter), adapted to emit through the same reporter sink as V1/V2.
+
+    It persists as a mission and exposes the identical
+    ``{mission, ports, findings, models, metrics}`` envelope, so all three
+    orchestrators are directly comparable. The LLM `reporter` AGENT stays on
+    ``self.reporter``; the result/telemetry sink is ``self._sink`` to avoid any
+    name clash. V2 is never touched by this class.
+    """
+
+    def __init__(
+        self,
+        target: str,
+        user_prompt: Optional[str] = None,
+        reporter=None,
+        should_cancel=None,
+        **_ignored,  # tolerate extra kwargs (e.g. initial_services) harmlessly
+    ):
         self.target = target
         self.planner = get_planner_agent()
         self.scanner = get_scanner_agent()
         self.tester = get_tester_agent()
         self.summarizer = get_summarizer_agent()
         self.critic = get_critic_agent()
-        self.reporter = get_reporter_agent()
+        self.reporter = get_reporter_agent()  # CrewAI reporter agent (unchanged)
         self.user_prompt = (
             user_prompt or "Perform a standard comprehensive security analysis."
         )
+        self._sink = reporter or NoOpReporter()  # result/telemetry sink (DBReporter)
+        self._should_cancel = should_cancel or (lambda: False)
+
+    def _check_cancel(self) -> None:
+        if self._should_cancel():
+            raise MissionCancelled()
+
+    def _emit_log(self, step: str, message: str, status: str = "running") -> None:
+        self._sink.log(step, message, status)
+
+    def _record_crew_usage(self, agent: str, crew, result, latency: float) -> None:
+        """Attribute the CrewAI aggregate token usage to a single pipeline agent.
+
+        CrewAI reports usage in aggregate (not per sub-agent), so this is one row
+        with provider 'ollama'; names vary across versions, so read defensively."""
+        usage = getattr(crew, "usage_metrics", None) or getattr(
+            result, "token_usage", None
+        )
+        if usage is None:
+            return
+        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
+        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+        total_tokens = int(
+            getattr(usage, "total_tokens", 0) or (prompt_tokens + completion_tokens)
+        )
+        self._sink.record_usage(
+            agent=agent,
+            model="crewai-local-pipeline (multi-model)",
+            provider="ollama",
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            latency_seconds=latency,
+        )
+
+    @staticmethod
+    def _normalize_findings(report) -> List[dict]:
+        """Map the Reporter agent's final JSON findings into the shared finding
+        shape. The Reporter output is LLM-produced, so read keys defensively."""
+        if not isinstance(report, dict):
+            return []
+        items = report.get("findings")
+        if not isinstance(items, list):
+            items = []
+        findings = []
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            findings.append(
+                {
+                    "port": it.get("port"),
+                    "service_name": it.get("service") or it.get("service_name"),
+                    "action": "ANALYSIS",
+                    "command": it.get("verification_command") or it.get("command"),
+                    "output": (
+                        it.get("raw_output")
+                        or it.get("evidence")
+                        or json.dumps(it, ensure_ascii=False)
+                    ),
+                    "reasoning": (
+                        it.get("vulnerability")
+                        or it.get("description")
+                        or it.get("reason")
+                    ),
+                    "confirmed": bool(it.get("confirmed", False)),
+                }
+            )
+        return findings
+
+    @staticmethod
+    def _ports_from_findings(findings: List[dict]) -> List[dict]:
+        seen: dict = {}
+        for f in findings:
+            port = f.get("port")
+            if port is None or port in seen:
+                continue
+            seen[port] = {
+                "port": port,
+                "service_name": f.get("service_name"),
+                "version": None,
+                "status": "completed",
+                "attempts": 0,
+                "history": [],
+            }
+        return list(seen.values())
 
     def _create_tasks(self):
         plan_task = Task(
@@ -184,6 +292,7 @@ class LocalOrchestrator:
         ]
 
     def run(self) -> dict:
+        self._check_cancel()
         tasks = self._create_tasks()
 
         talos_crew = Crew(
@@ -201,16 +310,30 @@ class LocalOrchestrator:
             ],
         )
 
+        self._emit_log("Planner", "Running local CrewAI pipeline...")
+        started = time.monotonic()
+        result = talos_crew.kickoff()
+        self._record_crew_usage(
+            "local_pipeline", talos_crew, result, time.monotonic() - started
+        )
+
+        # The Reporter agent emits the final JSON report; parse defensively so a
+        # malformed report degrades to zero findings instead of failing the run.
         try:
-            result = talos_crew.kickoff()
-            return self._extract_json(str(result))
-        except json.JSONDecodeError as e:
-            # Keep the raw detail server-side only; never return it to clients.
+            report = self._extract_json(str(result))
+        except (json.JSONDecodeError, ValueError) as e:
             errors.log_detail("LocalOrchestrator reporter JSON parse failed", e)
-            return {"error": "reporter_json_parse_failed"}
-        except Exception as e:
-            errors.log_detail("LocalOrchestrator pipeline failed", e)
-            return {"error": "pipeline_failed"}
+            report = {}
+
+        findings = self._normalize_findings(report)
+        ports = self._ports_from_findings(findings)
+        if ports:
+            self._sink.services_discovered(ports)
+        for finding in findings:
+            self._sink.finding(finding)
+
+        self._emit_log("Reporter", "Final report generated.", "success")
+        return {"status": "completed", "target": self.target, "findings": len(findings)}
 
     @staticmethod
     def _extract_json(raw: str) -> dict:

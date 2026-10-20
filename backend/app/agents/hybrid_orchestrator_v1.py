@@ -1,30 +1,155 @@
 import json
-from typing import Optional
+import time
+from typing import List, Optional
 
 from crewai import Crew, Process, Task
 from google import genai
 
+# Read-only reuse of V2's default sink. Importing it does NOT modify V2.
+from app.agents.hybrid_orchestrator_v2 import NoOpReporter
+from app.agents.mission_exceptions import MissionCancelled
 from app.agents.tester import get_tester_agent
+from app.agents.usage import extract_usage
 from app.core import errors
 from app.core.config import settings
 
 
 gemini_client = genai.Client()
 
+_GEMINI_PROVIDER = "gemini"
 
 
 class HybridOrchestratorV1:
-    def __init__(self, target: str, user_prompt: Optional[str] = None):
+    """Legacy hybrid pipeline (Planner -> CrewAI executor -> Critic), adapted to
+    emit through the same reporter sink as V2.
+
+    This makes a V1 run persist as a mission and expose the *identical*
+    ``{mission, ports, findings, models, metrics}`` envelope as V2, so results
+    can be compared side by side. V1 is architecturally different, though: it
+    does not run per-port exploits, so each finding carries the Critic's analysis
+    (no executed per-finding ``command``/``output``) and the ports roster is
+    derived from the findings themselves. V2 is never touched by this class.
+    """
+
+    def __init__(
+        self,
+        target: str,
+        user_prompt: Optional[str] = None,
+        reporter=None,
+        should_cancel=None,
+        **_ignored,  # tolerate extra kwargs (e.g. initial_services) harmlessly
+    ):
         self.target = target
         self.local_executor = get_tester_agent()
         self.user_prompt = (
             user_prompt or "Perform a standard comprehensive security analysis."
         )
+        self.reporter = reporter or NoOpReporter()
+        self._should_cancel = should_cancel or (lambda: False)
 
-    def _emit_log(self, step_name: str, message: str, status: str = "running"):
-        print(
-            f"\n[TALOSAI_LOG] [{status.upper()}] {step_name} -> {message}", flush=True
+    def _check_cancel(self) -> None:
+        if self._should_cancel():
+            raise MissionCancelled()
+
+    def _emit_log(self, step: str, message: str, status: str = "running") -> None:
+        self.reporter.log(step, message, status)
+
+    # --- usage tracking (same accounting as V2, per logical agent) ---
+
+    def _record_gemini_usage(self, agent: str, resp, latency: float) -> None:
+        prompt_tokens, completion_tokens, total_tokens = extract_usage(
+            resp, _GEMINI_PROVIDER
         )
+        self.reporter.record_usage(
+            agent=agent,
+            model=settings.GEMINI_MODEL,
+            provider=_GEMINI_PROVIDER,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            latency_seconds=latency,
+        )
+
+    def _record_crew_usage(self, agent: str, crew, result, latency: float) -> None:
+        """CrewAI exposes aggregate token usage after kickoff; attribute it to the
+        Ollama-backed executor. Field names vary across versions, so read
+        defensively and skip silently if unavailable (never break the mission)."""
+        usage = getattr(crew, "usage_metrics", None) or getattr(
+            result, "token_usage", None
+        )
+        if usage is None:
+            return
+        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
+        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+        total_tokens = int(
+            getattr(usage, "total_tokens", 0) or (prompt_tokens + completion_tokens)
+        )
+        self.reporter.record_usage(
+            agent=agent,
+            model=settings.MODEL_ASSIGNMENT["tester"].model,
+            provider="ollama",
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            latency_seconds=latency,
+        )
+
+    # --- findings normalization (Critic JSON is free-form) ---
+
+    @staticmethod
+    def _normalize_findings(validated) -> List[dict]:
+        items: list = []
+        if isinstance(validated, list):
+            items = validated
+        elif isinstance(validated, dict):
+            for key in ("findings", "results", "vulnerabilities", "confirmed_findings"):
+                if isinstance(validated.get(key), list):
+                    items = validated[key]
+                    break
+            else:
+                items = [validated]
+
+        findings = []
+        for it in items:
+            if not isinstance(it, dict):
+                continue
+            findings.append(
+                {
+                    "port": it.get("port"),
+                    "service_name": it.get("service") or it.get("service_name"),
+                    "action": "ANALYSIS",
+                    "command": None,  # V1 has no executed per-finding command
+                    "output": (
+                        it.get("evidence")
+                        or it.get("raw_output")
+                        or json.dumps(it, ensure_ascii=False)
+                    ),
+                    "reasoning": (
+                        it.get("vulnerability")
+                        or it.get("description")
+                        or it.get("reason")
+                    ),
+                    "confirmed": bool(it.get("confirmed", False)),
+                }
+            )
+        return findings
+
+    @staticmethod
+    def _ports_from_findings(findings: List[dict]) -> List[dict]:
+        seen: dict = {}
+        for f in findings:
+            port = f.get("port")
+            if port is None or port in seen:
+                continue
+            seen[port] = {
+                "port": port,
+                "service_name": f.get("service_name"),
+                "version": None,
+                "status": "completed",
+                "attempts": 0,
+                "history": [],
+            }
+        return list(seen.values())
 
     def _create_tasks(self, strategy_text: str):
         scan_task = Task(
@@ -38,178 +163,74 @@ class HybridOrchestratorV1:
         return [scan_task]
 
     def run(self) -> dict:
+        self._check_cancel()
+        self._emit_log("Planner", f"Cyber planning: {self.target}")
+        planning_prompt = (
+            f"You are the master planner for a penetration test against: {self.target}.\n"  # noqa: E501
+            f"User Directive: {self.user_prompt}\n"
+            "Generate a clear, bulleted execution strategy for a local tool executor."  # noqa: E501
+        )
+        started = time.monotonic()
+        response_planner = gemini_client.models.generate_content(
+            contents=planning_prompt,
+            model=settings.GEMINI_MODEL,
+        )
+        self._record_gemini_usage("planner", response_planner, time.monotonic() - started)
+        if response_planner is None or not getattr(response_planner, "text", None):
+            raise RuntimeError(
+                "Gemini planner returned an empty response (likely free-tier quota)."
+            )
+        strategy = response_planner.text
+        self._emit_log("Planner", "Cyber planning created", "completed")
+
+        self._check_cancel()
+        self._emit_log("Executor", "Initializing local CrewAI for executing tasks...")
+        crew = Crew(
+            tasks=self._create_tasks(strategy),
+            verbose=True,
+            process=Process.sequential,
+            agents=[self.local_executor],
+        )
+        started = time.monotonic()
+        raw_execution = crew.kickoff()
+        self._record_crew_usage("tester", crew, raw_execution, time.monotonic() - started)
+        raw_logs_text = (
+            raw_execution.raw if hasattr(raw_execution, "raw") else str(raw_execution)
+        )
+        self._emit_log("Executor", "CrewAI completed commands execution.", "completed")
+
+        self._check_cancel()
+        self._emit_log(
+            "Critic", "Send raw logs to Gemini for anti-hallucinations audit..."
+        )
+        prompt_audit = (
+            f"Analyze these raw terminal execution logs for the target {self.target}:\n"  # noqa: E501
+            f"{raw_logs_text}\n\n"
+            "Extract confirmed findings. For each finding specify: port, service, and vulnerability."  # noqa: E501
+        )
+        started = time.monotonic()
+        response_critic = gemini_client.models.generate_content(
+            contents=prompt_audit,
+            model=settings.GEMINI_MODEL,
+            config=genai.types.GenerateContentConfig(
+                response_mime_type="application/json",
+            ),
+        )
+        self._record_gemini_usage("critic", response_critic, time.monotonic() - started)
+        if response_critic is None or not getattr(response_critic, "text", None):
+            raise RuntimeError("Gemini critic returned an empty response.")
         try:
-            self._emit_log(
-                "Planner",
-                f"Cyber planning: {self.target}",
-            )
+            validated_json = json.loads(response_critic.text)
+        except (json.JSONDecodeError, TypeError) as e:
+            errors.log_detail("HybridOrchestratorV1 critic returned non-JSON", e)
+            validated_json = []
 
-            planning_prompt = (
-                f"You are the master planner for a "
-                f"penetration test against: {self.target}.\n"
-                f"User Directive: {self.user_prompt}\n"
-                "Generate a clear, bulleted execution "
-                "strategy for a local tool executor."
-            )
+        findings = self._normalize_findings(validated_json)
+        ports = self._ports_from_findings(findings)
+        if ports:
+            self.reporter.services_discovered(ports)
+        for finding in findings:
+            self.reporter.finding(finding)
+        self._emit_log("Critic", "Audit completed successfully", "success")
 
-            # self._emit_log(
-            #     "Planner", f"[GEMINI API CALL] model={settings.GEMINI_MODEL}"
-            # )
-            print(
-                f"\033[1;44m[GEMINI API CALL]\033[0m" \
-                f"Planner Agent: \033[94m{settings.GEMINI_MODEL}\033[0m"
-            )
-            response_planner = gemini_client.models.generate_content(
-                contents=planning_prompt,
-                model=settings.GEMINI_MODEL,
-            )
-            if (
-                response_planner is None
-                or not hasattr(response_planner, "text")
-                or response_planner.text is None
-            ):
-                return {
-                    "code": 429,
-                    "status": "failed",
-                    "source": "google",
-                    "details": {
-                        "code": 429,
-                        "status": "RESOURCE_EXHAUSTED",
-                        "message": "Gemini returned an empty response. "
-                        "Likely free tier quota limit hit.",
-                    },
-                }
-            strategy = response_planner.text
-            self._emit_log("Planner", "Cyber planning created", "completed")
-            print(f"--- Chain of Thought ---\n{strategy}\n----------------")
-
-            self._emit_log(
-                "Executor", "Initializing local CrewAI for executing tasks..."
-            )
-            tasks = self._create_tasks(strategy)
-
-            crew = Crew(
-                tasks=tasks,
-                verbose=True,
-                process=Process.sequential,
-                agents=[self.local_executor],
-            )
-
-            raw_execution_logs = crew.kickoff()
-            raw_logs_text = (
-                raw_execution_logs.raw
-                if hasattr(raw_execution_logs, "raw")
-                else str(raw_execution_logs)
-            )
-
-            self._emit_log(
-                "Executor",
-                "CrewAI completed commands execution.",
-                "completed",
-            )
-
-            self._emit_log(
-                "Critic",
-                "Send raw logs to Gemini for anti-hallucinations audit...",
-            )
-
-            prompt_audit = (
-                f"Analyze these raw terminal execution "
-                f"logs for the target {self.target}:\n"
-                f"{raw_logs_text}\n\n"
-                "Extract confirmed findings. For each finding "
-                "specify: port, service, and vulnerability."
-            )
-
-            # self._emit_log(
-            #     "Critic", f"[GEMINI API CALL] model={settings.GEMINI_MODEL}"
-            # )
-            print(
-                f"\033[1;44m[GEMINI API CALL]\033[0m" \
-                f"Critic Agent: \033[94m{settings.GEMINI_MODEL}\033[0m"
-            )
-            response_critic = gemini_client.models.generate_content(
-                contents=prompt_audit,
-                model=settings.GEMINI_MODEL,
-                config=genai.types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                ),
-            )
-            if (
-                response_critic is None
-                or not hasattr(response_critic, "text")
-                or response_critic.text is None
-            ):
-                return {
-                    "status": "failed",
-                    "source": "critic_empty",
-                    "message":
-                    "Gemini Critic returned an empty response. Cannot audit findings.",
-                }
-
-            try:
-                validated_json = json.loads(response_critic.text)
-            except json.JSONDecodeError as e:
-                errors.log_detail(
-                    "HybridOrchestratorV1 critic returned non-JSON response",
-                    {"error": e, "raw": response_critic.text},
-                )
-                return {
-                    "status": "failed",
-                    "source": "critic_parse",
-                    "message": "Gemini returned a non-JSON response.",
-                }
-            except TypeError as e:
-                errors.log_detail(
-                    "HybridOrchestratorV1 critic returned invalid data type", e
-                )
-                return {
-                    "status": "failed",
-                    "source": "critic_type_error",
-                    "message": "Invalid data type received from Critic.",
-                }
-            except Exception as e:
-                errors.log_detail(
-                    "HybridOrchestratorV1 critic JSON validation failed", e
-                )
-                return {
-                    "status": "failed",
-                    "source": "critic_generic_error",
-                    "message": "Unexpected error during Critic validation.",
-                }
-
-            self._emit_log("Critic", "Audit completed successfully", "success")
-
-            return {
-                "status": "completed",
-                "target": self.target,
-                "findings": validated_json,
-            }
-
-        except genai.errors.APIError as e:
-            # Log the upstream provider's own message/code server-side only.
-            errors.log_detail(
-                "HybridOrchestratorV1 Gemini API error",
-                {"code": e.code, "message": e.message},
-            )
-            return {
-                "code": e.code,
-                "status": "failed",
-                "source": "google",
-                "details": {
-                    "code": e.code,
-                    "status": getattr(e, "status", "failed"),
-                    "message": errors.CLIENT_MESSAGES[errors.ErrorCode.UPSTREAM_ERROR],
-                },
-            }
-
-        except Exception as e:
-            errors.log_detail("HybridOrchestratorV1 execution failed", e)
-            return {
-                "code": 500,
-                "status": "error",
-                "source": "generic",
-                "message": errors.CLIENT_MESSAGES[
-                    errors.ErrorCode.ORCHESTRATION_FAILED
-                ],
-            }
+        return {"status": "completed", "target": self.target, "findings": len(findings)}

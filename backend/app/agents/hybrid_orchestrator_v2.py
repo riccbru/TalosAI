@@ -14,6 +14,7 @@ from app.agents.tools import kali_lhost, kali_tool
 from app.agents.usage import extract_usage
 from app.core.config import settings
 
+
 # Provider serving the manager/scanner LLM calls in this orchestrator.
 _GEMINI_PROVIDER = "gemini"
 
@@ -358,7 +359,7 @@ class HybridOrchestratorV2:
             _last_call_ts = time.monotonic()
 
     def _discover_services(self) -> List[dict]:
-        """Run nmap on all ports, parse it, and return per-port working state (fresh run)."""
+        """Run nmap on all ports, parse it, and return per-port working state (fresh run)."""  # noqa: E501
         self._check_cancel()
         self._emit_log(
             "Manager",
@@ -366,7 +367,7 @@ class HybridOrchestratorV2:
         )
         raw_nmap_output = self._execute_micro_task(
             command_to_run=f"nmap -sV -sC -p- {self.target}",
-            expected_description="Comprehensive service verification scan on all 65536 ports.",
+            expected_description="Comprehensive service verification scan on all 65536 ports.",  # noqa: E501
         )
 
         self._emit_log("Manager", "Parsing raw Nmap output with Gemini...")
@@ -489,9 +490,9 @@ class HybridOrchestratorV2:
 
                 exploit_hint = ""
                 if known_exploits:
-                    exploit_hint = "\n\nKNOWN EXPLOITS FOR THIS SERVICE (try these in order if automated discovery fails):\n"
+                    exploit_hint = "\n\nKNOWN EXPLOITS FOR THIS SERVICE (try these in order if automated discovery fails):\n"  # noqa: E501
                     for module, payload, desc in known_exploits:
-                        exploit_hint += f"  - {module} (payload: {payload or 'default'}) - {desc}\n"
+                        exploit_hint += f"  - {module} (payload: {payload or 'default'}) - {desc}\n"  # noqa: E501
 
                 manager_prompt = (
                     f"You are the Lead Pentester managing an attack loop against target {self.target}.\n"  # noqa: E501

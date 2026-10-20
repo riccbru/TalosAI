@@ -287,6 +287,7 @@ def _worker(
     loop: asyncio.AbstractEventLoop,
     resume: bool,
     cancel_event: threading.Event,
+    version: str = "v2",
 ) -> None:
     reporter = DBReporter(mission_uuid, loop)
     try:
@@ -294,14 +295,36 @@ def _worker(
             reporter.mission_status("interrupted")
             return
         reporter.mission_status("running")
-        initial_services = _load_services(mission_uuid, loop) if resume else None
-        orchestrator = HybridOrchestratorV2(
-            target=scan_target,
-            user_prompt=prompt,
-            reporter=reporter,
-            initial_services=initial_services,
-            should_cancel=cancel_event.is_set,
-        )
+        if version == "v1":
+            # Legacy pipeline, adapted to report through the same sink so it
+            # persists and exposes the identical envelope as V2 (for comparison).
+            from app.agents.hybrid_orchestrator_v1 import HybridOrchestratorV1
+
+            orchestrator = HybridOrchestratorV1(
+                target=scan_target,
+                user_prompt=prompt,
+                reporter=reporter,
+                should_cancel=cancel_event.is_set,
+            )
+        elif version == "local":
+            # Air-gapped CrewAI pipeline, same reporter sink and envelope.
+            from app.agents.local_orchestrator import LocalOrchestrator
+
+            orchestrator = LocalOrchestrator(
+                target=scan_target,
+                user_prompt=prompt,
+                reporter=reporter,
+                should_cancel=cancel_event.is_set,
+            )
+        else:
+            initial_services = _load_services(mission_uuid, loop) if resume else None
+            orchestrator = HybridOrchestratorV2(
+                target=scan_target,
+                user_prompt=prompt,
+                reporter=reporter,
+                initial_services=initial_services,
+                should_cancel=cancel_event.is_set,
+            )
         orchestrator.run()
         reporter.mission_status("completed")
     except MissionCancelled:
@@ -322,6 +345,7 @@ def launch(
     prompt: Optional[str],
     loop: asyncio.AbstractEventLoop,
     resume: bool = False,
+    version: str = "v2",
 ) -> None:
     key = str(mission_uuid)
     cancel_event = threading.Event()
@@ -329,7 +353,7 @@ def launch(
         _cancel_events[key] = cancel_event
     thread = threading.Thread(
         target=_worker,
-        args=(key, scan_target, prompt, loop, resume, cancel_event),
+        args=(key, scan_target, prompt, loop, resume, cancel_event, version),
         name=f"mission-{mission_uuid}",
         daemon=True,
     )

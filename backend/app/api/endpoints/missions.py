@@ -14,10 +14,7 @@ from fastapi import (
 )
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.agents.hybrid_orchestrator_v1 import HybridOrchestratorV1
-from app.agents.local_orchestrator import LocalOrchestrator
 from app.api.deps import get_current_user
-from app.core import errors
 from app.core.security import decode_access_token
 from app.crud import crud_missions
 from app.db.session import AsyncSessionLocal, get_db
@@ -162,56 +159,74 @@ async def mission_stream(
         mission_runner.unsubscribe(mission_key, queue)
 
 
-@router.post("/v1/test/local")
-def local_run_mission(request: MissionRequest) -> dict:
-    try:
-        orchestrator = LocalOrchestrator(
-            target=request.target, user_prompt=request.prompt
-        )
-        result = orchestrator.run()
+@router.post("/v1/test/local", status_code=status.HTTP_202_ACCEPTED)
+async def local_run_mission(
+    request: MissionRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Create an air-gapped (local CrewAI) mission, return its uuid immediately,
+    run it in the background. Same async contract and response envelope as the
+    hybrid endpoints, so all three orchestrators are directly comparable.
+    """
+    target_ip = resolve_target_ip(request.target)
 
-        if "error" in result:
-            return errors.handle_failure_result(
-                result, "local_run_mission", target=request.target
-            )
+    mission = await crud_missions.create_mission(
+        db,
+        user_uid=current_user.uuid,
+        target=request.target,
+        target_ip=target_ip,
+        prompt=request.prompt,
+        version="local",
+    )
+    await db.commit()
 
-        return {"status": "completed", "target": request.target, "data": result}
+    mission_runner.launch(
+        mission_uuid=mission.uuid,
+        scan_target=scan_host(request.target),
+        prompt=request.prompt,
+        loop=asyncio.get_running_loop(),
+        resume=False,
+        version="local",
+    )
 
-    except Exception as e:
-        return errors.handle_exception(
-            e, "local_run_mission", target=request.target
-        )
+    return {"mission_uuid": str(mission.uuid), "status": mission.status}
 
 
-@router.post("/v1/test/hybrid")
-def hybrid_run_mission_v1(request: MissionRequest) -> dict:
-    try:
-        target = resolve_target_ip(request.target)
-        orchestrator = HybridOrchestratorV1(
-            target=target,
-            user_prompt=request.prompt
-        )
-        result = orchestrator.run()
+@router.post("/v1/test/hybrid", status_code=status.HTTP_202_ACCEPTED)
+async def hybrid_run_mission_v1(
+    request: MissionRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Create a V1 mission, return its uuid immediately, run it in the background.
 
-        if result.get("status") in ["failed", "error"]:
-            # Upstream (Gemini) failures carry a meaningful HTTP status we want
-            # to surface; the body was already sanitized by the orchestrator.
-            if result.get("source") == "google":
-                return errors.error_response(
-                    errors.ErrorCode.UPSTREAM_ERROR,
-                    target=request.target,
-                    status_code=result.get("code"),
-                )
+    Same async contract and response envelope as V2 (persisted mission, live
+    stream, `GET /{uuid}` with mission/ports/findings/models/metrics), so V1 and
+    V2 runs can be compared side by side.
+    """
+    target_ip = resolve_target_ip(request.target)
 
-            return errors.handle_failure_result(
-                result, "hybrid_run_mission_v1", target=request.target
-            )
+    mission = await crud_missions.create_mission(
+        db,
+        user_uid=current_user.uuid,
+        target=request.target,
+        target_ip=target_ip,
+        prompt=request.prompt,
+        version="v1",
+    )
+    await db.commit()
 
-        return result
-    except Exception as e:
-        return errors.handle_exception(
-            e, "hybrid_run_mission_v1", target=request.target
-        )
+    mission_runner.launch(
+        mission_uuid=mission.uuid,
+        scan_target=scan_host(request.target),
+        prompt=request.prompt,
+        loop=asyncio.get_running_loop(),
+        resume=False,
+        version="v1",
+    )
+
+    return {"mission_uuid": str(mission.uuid), "status": mission.status}
 
 
 @router.post("/v2/test/hybrid", status_code=status.HTTP_202_ACCEPTED)
@@ -287,6 +302,7 @@ async def resume_mission(
         prompt=mission.prompt,
         loop=asyncio.get_running_loop(),
         resume=True,
+        version=mission.orchestrator_version,
     )
 
     return {"mission_uuid": str(mission.uuid), "status": "running"}
