@@ -59,12 +59,42 @@ def scan_host(target: str) -> str:
     return target
 
 
+# Maps the public ?orch filter to stored orchestrator_version values.
+_ORCH_FILTERS = {
+    "local": ["local"],
+    "hybrid": ["v1", "v2"],
+    "v1": ["v1"],
+    "v2": ["v2"],
+}
+
+
+def _orch_to_versions(orch: Optional[str]) -> Optional[list]:
+    if not orch:
+        return None
+    versions = _ORCH_FILTERS.get(orch.strip().lower())
+    if versions is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Invalid orch '{orch}'. Use one of: "
+                f"{', '.join(_ORCH_FILTERS)}."
+            ),
+        )
+    return versions
+
+
 @router.get("")
 async def list_missions(
+    orch: Optional[str] = Query(
+        None, description="Filter by orchestrator: local | hybrid | v1 | v2"
+    ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list:
-    missions = await crud_missions.list_missions(db, current_user.uuid)
+    versions = _orch_to_versions(orch)
+    missions = await crud_missions.list_missions(
+        db, current_user.uuid, versions=versions
+    )
     return [crud_missions.serialize_mission(m) for m in missions]
 
 

@@ -3,8 +3,8 @@ import time
 from typing import List, Optional
 
 from crewai import Crew, Process, Task
-from google import genai
 
+from app.agents import gemini_backoff
 # Read-only reuse of V2's default sink. Importing it does NOT modify V2.
 from app.agents.hybrid_orchestrator_v2 import NoOpReporter
 from app.agents.mission_exceptions import MissionCancelled
@@ -13,8 +13,6 @@ from app.agents.usage import extract_usage
 from app.core import errors
 from app.core.config import settings
 
-
-gemini_client = genai.Client()
 
 _GEMINI_PROVIDER = "gemini"
 
@@ -170,12 +168,11 @@ class HybridOrchestratorV1:
             f"User Directive: {self.user_prompt}\n"
             "Generate a clear, bulleted execution strategy for a local tool executor."  # noqa: E501
         )
-        started = time.monotonic()
-        response_planner = gemini_client.models.generate_content(
-            contents=planning_prompt,
-            model=settings.GEMINI_MODEL,
+        response_planner, latency = gemini_backoff.generate(
+            planning_prompt,
+            on_log=lambda m: self._emit_log("Planner", m),
         )
-        self._record_gemini_usage("planner", response_planner, time.monotonic() - started)
+        self._record_gemini_usage("planner", response_planner, latency)
         if response_planner is None or not getattr(response_planner, "text", None):
             raise RuntimeError(
                 "Gemini planner returned an empty response (likely free-tier quota)."
@@ -208,15 +205,12 @@ class HybridOrchestratorV1:
             f"{raw_logs_text}\n\n"
             "Extract confirmed findings. For each finding specify: port, service, and vulnerability."  # noqa: E501
         )
-        started = time.monotonic()
-        response_critic = gemini_client.models.generate_content(
-            contents=prompt_audit,
-            model=settings.GEMINI_MODEL,
-            config=genai.types.GenerateContentConfig(
-                response_mime_type="application/json",
-            ),
+        response_critic, latency = gemini_backoff.generate(
+            prompt_audit,
+            json_mode=True,
+            on_log=lambda m: self._emit_log("Critic", m),
         )
-        self._record_gemini_usage("critic", response_critic, time.monotonic() - started)
+        self._record_gemini_usage("critic", response_critic, latency)
         if response_critic is None or not getattr(response_critic, "text", None):
             raise RuntimeError("Gemini critic returned an empty response.")
         try:

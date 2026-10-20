@@ -52,12 +52,15 @@ async def get_mission(
     return result.scalar_one_or_none()
 
 
-async def list_missions(db: AsyncSession, user_uid: UUIDLike) -> List[Mission]:
-    stmt = (
-        select(Mission)
-        .where(Mission.user_uid == _as_uuid(user_uid))
-        .order_by(Mission.created_at.desc())
-    )
+async def list_missions(
+    db: AsyncSession,
+    user_uid: UUIDLike,
+    versions: Optional[List[str]] = None,
+) -> List[Mission]:
+    stmt = select(Mission).where(Mission.user_uid == _as_uuid(user_uid))
+    if versions:
+        stmt = stmt.where(Mission.orchestrator_version.in_(versions))
+    stmt = stmt.order_by(Mission.created_at.desc())
     result = await db.execute(stmt)
     return list(result.scalars().all())
 
@@ -315,12 +318,24 @@ def _hms(seconds: float) -> str:
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
 
 
+def _ensure_aware(dt: datetime) -> datetime:
+    """Treat a naive datetime as UTC. PostgreSQL returns tz-aware values, but
+    other backends (e.g. SQLite) return naive ones; normalizing avoids a
+    'can't subtract offset-naive and offset-aware datetimes' TypeError."""
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=timezone.utc)
+
+
 def _mission_duration(mission: Mission) -> tuple[Optional[float], Optional[str]]:
     """Wall-clock from created_at to finished_at (or now, if still running)."""
     if mission.created_at is None:
         return None, None
-    end = mission.finished_at or datetime.now(timezone.utc)
-    seconds = max(0.0, (end - mission.created_at).total_seconds())
+    start = _ensure_aware(mission.created_at)
+    end = (
+        _ensure_aware(mission.finished_at)
+        if mission.finished_at
+        else datetime.now(timezone.utc)
+    )
+    seconds = max(0.0, (end - start).total_seconds())
     return round(seconds, 3), _hms(seconds)
 
 

@@ -1,12 +1,11 @@
 import json
 import re
-import time
 from typing import Callable, List, Optional
 
 # from crewai import Crew, Task
-from google import genai
 from pydantic import BaseModel, Field
 
+from app.agents import gemini_backoff
 from app.agents.exploit_db import get_exploits_for_service
 from app.agents.mission_exceptions import MissionCancelled  # noqa: F401 (re-export)
 from app.agents.tester import get_tester_agent
@@ -40,16 +39,6 @@ _CONFIRM_PATTERNS = [
     r"authenticated",
     r"privilege escalation",
 ]
-
-
-gemini_client = genai.Client()
-
-# Gemini free tier allows ~15 requests/min per model. Stay safely under that with a
-# client-side throttle, and retry on transient errors (429 rate limit, 503/500 server
-# spikes) with backoff instead of letting them fail the mission. ~4.5s spacing => <14/min.
-_MIN_SECONDS_BETWEEN_CALLS = 4.5
-_MAX_RETRIES = 5
-_last_call_ts = 0.0
 
 
 class DiscoveredService(BaseModel):
@@ -262,16 +251,6 @@ class HybridOrchestratorV2:
         return output
 
     @staticmethod
-    def _parse_retry_delay(message: str, fallback: float = 30.0) -> float:
-        # Gemini surfaces the suggested wait either as "Please retry in 30.04s"
-        # or as a RetryInfo "retryDelay": "30s" field. Honor whichever is present.
-        for pattern in (r"retry in ([\d.]+)s", r"retryDelay'?:\s*'?(\d+(?:\.\d+)?)s"):
-            match = re.search(pattern, message)
-            if match:
-                return float(match.group(1)) + 1.0  # small cushion
-        return fallback
-
-    @staticmethod
     def _loads_or_repair(text: Optional[str]) -> dict:
         """Parse model output as JSON, repairing a stray prose wrapper if needed.
 
@@ -294,69 +273,28 @@ class HybridOrchestratorV2:
                     pass
             raise LLMResponseError("model returned non-JSON output")
 
-    def _generate(self, prompt: str, schema, agent: str, _retry: int = 0) -> dict:
-        global _last_call_ts
-
-        wait = _MIN_SECONDS_BETWEEN_CALLS - (time.monotonic() - _last_call_ts)
-        if wait > 0:
-            time.sleep(wait)
-
-        try:
-            started = time.monotonic()
-            resp = gemini_client.models.generate_content(
-                contents=prompt,
-                model=settings.GEMINI_MODEL,
-                config=genai.types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=schema,
-                ),
-            )
-            latency = time.monotonic() - started
-            # Record usage the moment the call returns — before parsing — so the
-            # tokens we spent are counted even if the body turns out unparseable.
-            prompt_tokens, completion_tokens, total_tokens = extract_usage(
-                resp, _GEMINI_PROVIDER
-            )
-            self.reporter.record_usage(
-                agent=agent,
-                model=settings.GEMINI_MODEL,
-                provider=_GEMINI_PROVIDER,
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                total_tokens=total_tokens,
-                latency_seconds=latency,
-            )
-            return self._loads_or_repair(resp.text)
-        except LLMResponseError:
-            # Parsing failure: do NOT retry the network (we got a 200), just
-            # bubble up so the caller can skip/degrade.
-            raise
-        except Exception as e:
-            msg = str(e)
-            is_rate_limit = "429" in msg or "RESOURCE_EXHAUSTED" in msg
-            is_transient_server = (
-                "503" in msg or "UNAVAILABLE" in msg
-                or "500" in msg or "INTERNAL" in msg
-            )
-            if (is_rate_limit or is_transient_server) and _retry < _MAX_RETRIES:
-                if is_rate_limit:
-                    # 429 carries a precise retryDelay from Google; honor it.
-                    delay = self._parse_retry_delay(msg)
-                    reason = "rate limit (429)"
-                else:
-                    # 503/500 carry no retryDelay: exponential backoff 2,4,8,16,32..60s.
-                    delay = min(2.0 * (2 ** _retry), 60.0)
-                    reason = "transient server error (503/500)"
-                self._emit_log(
-                    "Manager",
-                    f"Gemini {reason}; backing off {delay:.0f}s "
-                    f"(retry {_retry + 1}/{_MAX_RETRIES})...",
-                )
-                time.sleep(delay)
-                return self._generate(prompt, schema, agent, _retry=_retry + 1)
-            raise
-        finally:
-            _last_call_ts = time.monotonic()
+    def _generate(self, prompt: str, schema, agent: str) -> dict:
+        # Throttle + retry/backoff live in the shared helper (same logic for V1).
+        resp, latency = gemini_backoff.generate(
+            prompt,
+            schema=schema,
+            on_log=lambda m: self._emit_log("Manager", m),
+        )
+        # Record usage the moment the call returns — before parsing — so the
+        # tokens we spent are counted even if the body turns out unparseable.
+        prompt_tokens, completion_tokens, total_tokens = extract_usage(
+            resp, _GEMINI_PROVIDER
+        )
+        self.reporter.record_usage(
+            agent=agent,
+            model=settings.GEMINI_MODEL,
+            provider=_GEMINI_PROVIDER,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            latency_seconds=latency,
+        )
+        return self._loads_or_repair(resp.text)
 
     def _discover_services(self) -> List[dict]:
         """Run nmap on all ports, parse it, and return per-port working state (fresh run)."""  # noqa: E501

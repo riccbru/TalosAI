@@ -6,9 +6,9 @@ router level (see app.main / conftest.app), so it applies uniformly to every
 mission endpoint; these tests exercise it once via `/v1/test/local` rather
 than duplicating the same auth assertions across all three mission routes.
 
-`LocalOrchestrator` is monkeypatched for the "authentication succeeds" case
-only, purely to avoid triggering real agent/orchestration execution as a
-side effect of an auth test — mission business logic itself is untouched.
+`mission_runner.launch` is monkeypatched for the "authentication succeeds"
+case only, purely to avoid spawning a real background orchestration worker as
+a side effect of an auth test — mission business logic itself is untouched.
 """
 
 from datetime import datetime, timedelta, timezone
@@ -28,14 +28,6 @@ pytestmark = pytest.mark.anyio
 
 MISSIONS_URL = "/talos/api/missions/v1/test/local"
 VALID_BODY = {"target": "example.com"}
-
-
-class _FakeOrchestrator:
-    def __init__(self, *args, **kwargs):
-        pass
-
-    def run(self):
-        return {"data": "stubbed"}
 
 
 async def test_no_token_is_rejected(client):
@@ -81,7 +73,11 @@ async def test_expired_token_is_rejected(client, user_factory):
 async def test_valid_token_for_active_user_authenticates(
     client, user_factory, monkeypatch
 ):
-    monkeypatch.setattr(missions_module, "LocalOrchestrator", _FakeOrchestrator)
+    # The endpoint now runs the mission asynchronously on a background worker;
+    # stub the launch so this auth test never spawns a real orchestration thread.
+    monkeypatch.setattr(
+        missions_module.mission_runner, "launch", lambda **kwargs: None
+    )
 
     user = await user_factory()
     token = create_access_token(str(user.uuid), role=user.role.value)
@@ -91,7 +87,7 @@ async def test_valid_token_for_active_user_authenticates(
     )
 
     assert resp.status_code != 401
-    assert resp.status_code == 200
+    assert resp.status_code == 202
 
 
 async def test_valid_token_for_deactivated_user_is_rejected(client, user_factory, db):
