@@ -28,7 +28,7 @@ Design pillars:
 - **Exploit-First + Short-Circuit** — known vulnerabilities are confirmed with
   *zero* LLM calls where possible (see [Architecture §4](./arch.md#4-exploit-first--short-circuit)).
 - **Evidence-based validation** — a finding is `confirmed` only on hard proof
-  such as `uid=0(root)` (see [Architecture §5](./arch.md#5-the-validation-layer-evidence-confirmation)).
+  such as `id` command output (*e.g.* `uid=0(root)`) (see [Architecture §5](./arch.md#5-the-validation-layer-evidence-confirmation)).
 - **Full observability & FinOps** — durable persistence, a live WebSocket
   stream, and provider-agnostic per-agent token/latency accounting.
 
