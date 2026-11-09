@@ -9,10 +9,9 @@ result to the template as ``t``::
     from app.i18n import get_labels
     html = template.render(t=get_labels(lang), mission_id=..., ...)
 
-Keep the key set in sync with the template. The template currently uses:
-report_title, report_subtitle, confidential, page, mission_id, target, date,
-findings_title, col_service, col_port, col_command, col_status, confirmed,
-unconfirmed, no_command, no_findings.
+Mission statuses are localized separately via :func:`get_status_label`, since
+their values come from the DB (``completed``, ``interrupted``, ...), not the
+template.
 """
 
 from typing import Dict
@@ -30,17 +29,41 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         # --- mission metadata labels ---
         "mission_id": "Mission ID",
         "target": "Target",
+        "operator": "Launched by",
+        "engine": "Engine",
+        "status": "Status",
+        "started": "Started",
+        "finished": "Finished",
+        "duration": "Duration",
+        "generated": "Generated on",
         "date": "Date",
+        "not_available": "N/A",
         # --- findings section ---
         "findings_title": "Confirmed Findings",
+        "findings_summary": "confirmed vulnerabilities identified.",
         "col_service": "Service",
         "col_port": "Port",
         "col_command": "Validated Command",
+        "col_output": "Output / Evidence",
+        "analysis": "Analysis",
         "col_status": "Status",
         "confirmed": "Confirmed",
         "unconfirmed": "Unconfirmed",
         "no_command": "—",
+        "no_output": "No output captured.",
         "no_findings": "No confirmed vulnerabilities were found.",
+        # --- FinOps / resource usage ---
+        "finops_title": "Resource Usage (FinOps)",
+        "col_agent": "Agent",
+        "col_model": "Model",
+        "col_provider": "Provider",
+        "col_prompt_tokens": "Prompt",
+        "col_completion_tokens": "Completion",
+        "col_total_tokens": "Tokens",
+        "col_calls": "Calls",
+        "col_latency": "Latency (s)",
+        "total_row": "Total",
+        "finops_none": "No model usage recorded.",
     },
     "it": {
         # --- document chrome ---
@@ -51,17 +74,41 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         # --- mission metadata labels ---
         "mission_id": "ID Missione",
         "target": "Target",
+        "operator": "Avviato da",
+        "engine": "Motore",
+        "status": "Stato",
+        "started": "Inizio",
+        "finished": "Fine",
+        "duration": "Durata",
+        "generated": "Generato il",
         "date": "Data",
+        "not_available": "N/D",
         # --- findings section ---
         "findings_title": "Vulnerabilità Confermate",
+        "findings_summary": "vulnerabilità confermate identificate.",
         "col_service": "Servizio",
         "col_port": "Porta",
         "col_command": "Comando Validato",
+        "col_output": "Output / Evidenza",
+        "analysis": "Analisi",
         "col_status": "Stato",
         "confirmed": "Confermato",
         "unconfirmed": "Non confermato",
         "no_command": "—",
+        "no_output": "Nessun output catturato.",
         "no_findings": "Nessuna vulnerabilità confermata rilevata.",
+        # --- FinOps / resource usage ---
+        "finops_title": "Consumo Risorse (FinOps)",
+        "col_agent": "Agente",
+        "col_model": "Modello",
+        "col_provider": "Provider",
+        "col_prompt_tokens": "Prompt",
+        "col_completion_tokens": "Completion",
+        "col_total_tokens": "Token",
+        "col_calls": "Chiamate",
+        "col_latency": "Latenza (s)",
+        "total_row": "Totale",
+        "finops_none": "Nessun consumo registrato.",
     },
     "fr": {
         # --- document chrome ---
@@ -72,21 +119,82 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         # --- mission metadata labels ---
         "mission_id": "ID de mission",
         "target": "Cible",
+        "operator": "Lancé par",
+        "engine": "Moteur",
+        "status": "Statut",
+        "started": "Début",
+        "finished": "Fin",
+        "duration": "Durée",
+        "generated": "Généré le",
         "date": "Date",
+        "not_available": "N/D",
         # --- findings section ---
         "findings_title": "Vulnérabilités Confirmées",
+        "findings_summary": "vulnérabilités confirmées identifiées.",
         "col_service": "Service",
         "col_port": "Port",
         "col_command": "Commande Validée",
+        "col_output": "Sortie / Preuve",
+        "analysis": "Analyse",
         "col_status": "Statut",
         "confirmed": "Confirmé",
         "unconfirmed": "Non confirmé",
         "no_command": "—",
+        "no_output": "Aucune sortie capturée.",
         "no_findings": "Aucune vulnérabilité confirmée n'a été détectée.",
+        # --- FinOps / resource usage ---
+        "finops_title": "Consommation de Ressources (FinOps)",
+        "col_agent": "Agent",
+        "col_model": "Modèle",
+        "col_provider": "Fournisseur",
+        "col_prompt_tokens": "Prompt",
+        "col_completion_tokens": "Completion",
+        "col_total_tokens": "Jetons",
+        "col_calls": "Appels",
+        "col_latency": "Latence (s)",
+        "total_row": "Total",
+        "finops_none": "Aucune consommation enregistrée.",
+    },
+}
+
+# Mission status values (as stored in the DB) -> localized display text.
+STATUS_LABELS: Dict[str, Dict[str, str]] = {
+    "en": {
+        "pending": "Pending",
+        "running": "Running",
+        "completed": "Completed",
+        "interrupted": "Interrupted",
+        "failed": "Failed",
+        "cancelled": "Cancelled",
+    },
+    "it": {
+        "pending": "In attesa",
+        "running": "In corso",
+        "completed": "Completato",
+        "interrupted": "Interrotto",
+        "failed": "Fallito",
+        "cancelled": "Annullato",
+    },
+    "fr": {
+        "pending": "En attente",
+        "running": "En cours",
+        "completed": "Terminé",
+        "interrupted": "Interrompu",
+        "failed": "Échoué",
+        "cancelled": "Annulé",
     },
 }
 
 SUPPORTED_LANGS = tuple(TRANSLATIONS.keys())
+
+
+def _norm(lang: str | None) -> str:
+    """Normalize a language tag to a supported code, falling back to default."""
+    if lang:
+        code = lang.strip().lower().replace("_", "-").split("-", 1)[0]
+        if code in TRANSLATIONS:
+            return code
+    return DEFAULT_LANG
 
 
 def get_labels(lang: str | None) -> Dict[str, str]:
@@ -98,7 +206,12 @@ def get_labels(lang: str | None) -> Dict[str, str]:
     template needs instead of raising ``UndefinedError`` at render time.
     """
     base = dict(TRANSLATIONS[DEFAULT_LANG])
-    if lang:
-        code = lang.strip().lower().replace("_", "-").split("-", 1)[0]
-        base.update(TRANSLATIONS.get(code, {}))
+    base.update(TRANSLATIONS[_norm(lang)])
     return base
+
+
+def get_status_label(status: str | None, lang: str | None) -> str:
+    """Localize a mission status; unknown values pass through capitalized."""
+    if not status:
+        return TRANSLATIONS[_norm(lang)]["not_available"]
+    return STATUS_LABELS[_norm(lang)].get(status.lower(), status.capitalize())

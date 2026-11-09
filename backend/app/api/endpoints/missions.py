@@ -323,6 +323,7 @@ async def get_mission_detail(
         "findings": [crud_missions.serialize_finding(f) for f in findings],
         "models": crud_missions.serialize_models_map(usage_rows),
         "metrics": crud_missions.aggregate_metrics(usage_rows, mission),
+        "usage_table": crud_missions.serialize_usage_table(usage_rows),
     }
 
 
@@ -342,19 +343,32 @@ async def download_mission_report(
     findings, _total = await crud_missions.get_findings_filtered(
         db, mission.uuid, confirmed=True, limit=10_000, offset=0
     )
+    usage_rows = await crud_missions.get_model_usage(db, mission.uuid)
+    usage_table = crud_missions.serialize_usage_table(usage_rows)
     try:
-        pdf_bytes = report_service.render_report_pdf(mission, findings, lang)
+        pdf_bytes = report_service.render_report_pdf(
+            mission, findings, lang,
+            operator_email=current_user.email,
+            usage_table=usage_table,
+        )
     except ImportError as exc:  # WeasyPrint / native libs unavailable
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="PDF rendering backend (WeasyPrint) is not available.",
         ) from exc
 
+    # attachment + filename* (RFC 5987) so clients reliably save the PDF under
+    # this exact name instead of deriving it from the mission UUID in the URL.
     filename = f"TalosAI_Report_{mission.uuid}_{lang}.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{filename}"; '
+                f"filename*=UTF-8''{filename}"
+            )
+        },
     )
 
 

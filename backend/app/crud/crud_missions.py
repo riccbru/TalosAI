@@ -383,6 +383,43 @@ def serialize_models_map(rows: List[MissionModelUsage]) -> dict:
     return {row.agent: serialize_model_usage(row) for row in rows}
 
 
+def serialize_usage_table(rows: List[MissionModelUsage]) -> dict:
+    """Flat FinOps table shared by the API and the PDF report.
+
+    Returns ``{"rows": [...], "total": {...}}`` with one row per actually-used
+    (mission, agent) — unused agents have no DB row, so they are simply absent
+    (never zero-filled) — plus a grand-total row summed across them. Row order is
+    the DB insertion order (chronological), identical in both consumers.
+    """
+    table_rows = []
+    tot_p = tot_c = tot_t = tot_calls = 0
+    tot_latency = 0.0
+    for r in rows:
+        table_rows.append({
+            "agent": r.agent,
+            "model": r.model,
+            "provider": r.provider,
+            "prompt_tokens": r.prompt_tokens,
+            "completion_tokens": r.completion_tokens,
+            "total_tokens": r.total_tokens,
+            "call_count": r.call_count,
+            "total_latency_seconds": round(r.total_latency_seconds, 3),
+        })
+        tot_p += r.prompt_tokens
+        tot_c += r.completion_tokens
+        tot_t += r.total_tokens
+        tot_calls += r.call_count
+        tot_latency += r.total_latency_seconds
+    total = {
+        "prompt_tokens": tot_p,
+        "completion_tokens": tot_c,
+        "total_tokens": tot_t,
+        "call_count": tot_calls,
+        "total_latency_seconds": round(tot_latency, 3),
+    }
+    return {"rows": table_rows, "total": total}
+
+
 def aggregate_metrics(
     rows: List[MissionModelUsage], mission: Optional[Mission] = None
 ) -> dict:
