@@ -41,7 +41,10 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         # --- findings section ---
         "findings_title": "Confirmed Findings",
         "findings_summary": "confirmed vulnerabilities identified.",
+        "not_hacked_title": "Services Not Compromised",
+        "not_hacked_none": "Every discovered service was compromised.",
         "col_service": "Service",
+        "col_version": "Version",
         "col_port": "Port",
         "col_command": "Validated Command",
         "col_output": "Output / Evidence",
@@ -86,7 +89,10 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         # --- findings section ---
         "findings_title": "Vulnerabilità Confermate",
         "findings_summary": "vulnerabilità confermate identificate.",
+        "not_hacked_title": "Servizi Non Compromessi",
+        "not_hacked_none": "Tutti i servizi rilevati sono stati compromessi.",
         "col_service": "Servizio",
+        "col_version": "Versione",
         "col_port": "Porta",
         "col_command": "Comando Validato",
         "col_output": "Output / Evidenza",
@@ -131,7 +137,10 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         # --- findings section ---
         "findings_title": "Vulnérabilités Confirmées",
         "findings_summary": "vulnérabilités confirmées identifiées.",
+        "not_hacked_title": "Services Non Compromis",
+        "not_hacked_none": "Tous les services détectés ont été compromis.",
         "col_service": "Service",
+        "col_version": "Version",
         "col_port": "Port",
         "col_command": "Commande Validée",
         "col_output": "Sortie / Preuve",

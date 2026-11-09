@@ -345,11 +345,16 @@ async def download_mission_report(
     )
     usage_rows = await crud_missions.get_model_usage(db, mission.uuid)
     usage_table = crud_missions.serialize_usage_table(usage_rows)
+    ports = [
+        crud_missions.serialize_port(p)
+        for p in await crud_missions.get_ports(db, mission.uuid)
+    ]
     try:
         pdf_bytes = report_service.render_report_pdf(
             mission, findings, lang,
             operator_email=current_user.email,
             usage_table=usage_table,
+            ports=ports,
         )
     except ImportError as exc:  # WeasyPrint / native libs unavailable
         raise HTTPException(
@@ -359,7 +364,7 @@ async def download_mission_report(
 
     # attachment + filename* (RFC 5987) so clients reliably save the PDF under
     # this exact name instead of deriving it from the mission UUID in the URL.
-    filename = f"TalosAI_Report_{mission.uuid}_{lang}.pdf"
+    filename = f"{mission.uuid}_{lang}.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
