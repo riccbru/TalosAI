@@ -332,7 +332,23 @@ def _worker(
         reporter.mission_status("interrupted")
     except Exception as e:  # noqa: BLE001
         traceback.print_exc()
-        reporter.mission_status("failed", error=str(e))
+        msg = str(e)
+        # The CrewAI/Ollama paths (local/v1) surface a misleading "OpenAI API"
+        # error when they really can't reach the local LLM. Make it actionable.
+        if version in ("local", "v1") and any(
+            s in msg for s in ("timed out", "Failed to connect", "Connection", "OpenAI API")
+        ):
+            from app.core.config import settings
+
+            reporter.log(
+                "Executor",
+                "Local LLM (Ollama) unreachable or model missing. Check "
+                f"OLLAMA_BASE_URL='{settings.OLLAMA_BASE_URL}' is reachable from "
+                "the backend container and the configured models are pulled "
+                "('ollama list'). Underlying error: " + msg,
+                "failed",
+            )
+        reporter.mission_status("failed", error=msg)
     finally:
         with _cancel_lock:
             _cancel_events.pop(mission_uuid, None)

@@ -3,6 +3,8 @@ from typing import Dict
 from pydantic import BaseModel
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.core.prompts import EXPLOITATION_PLAYBOOK
+
 
 class AgentConfig(BaseModel):
     model: str
@@ -92,7 +94,8 @@ class Settings(BaseSettings):
                     "- Never fabricate exploit names, CVE IDs, or tool output.\n"
                     "- Never use placeholders like 'exploit_name', 'target_ip', or 'USERNAME'.\n"  # noqa: E501
                     "- If a tool returns no results, set confirmed=false and raw_output to the actual terminal response.\n"  # noqa: E501
-                    "- Only use data present in the scanner context. Never assume services not found in prior output."  # noqa: E501
+                    "- Only use data present in the scanner context. Never assume services not found in prior output.\n\n"  # noqa: E501
+                    + EXPLOITATION_PLAYBOOK
                 ),
             ),
             "summarizer": AgentConfig(

@@ -22,7 +22,7 @@ per-port attempt budget guarantees termination) and **knowledge-guided**
 call). The result is a system that is reproducible, observable in real time, and
 economical with LLM usage.
 
-Design pillars:
+Design pillars:M
 
 - **Deterministic control flow** — bounded attempts, no unbounded recursion.
 - **Exploit-First + Short-Circuit** — known vulnerabilities are confirmed with

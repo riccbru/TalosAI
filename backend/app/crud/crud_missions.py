@@ -6,18 +6,40 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.missions import (
+    TERMINAL_STATUSES,
     Finding,
     Mission,
     MissionModelUsage,
     MissionPort,
-    TERMINAL_STATUSES,
 )
+
 
 UUIDLike = Union[str, uuid_lib.UUID]
 
 
 def _as_uuid(value: UUIDLike) -> uuid_lib.UUID:
     return value if isinstance(value, uuid_lib.UUID) else uuid_lib.UUID(str(value))
+
+
+def _as_int_port(value) -> Optional[int]:
+    """Coerce a port to int. LLM-driven orchestrators (local/v1) often yield
+    ports as strings like '21' or '80/tcp'; the DB column is INTEGER, so
+    normalize at the persistence boundary. Returns None if not parseable."""
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    try:
+        return int(str(value).strip().split("/")[0])
+    except (ValueError, TypeError):
+        return None
+
+
+def _as_int(value, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        return default
 
 
 async def create_mission(
@@ -130,14 +152,17 @@ async def replace_ports(
     mid = _as_uuid(mission_uuid)
     await db.execute(delete(MissionPort).where(MissionPort.mission_uid == mid))
     for svc in services:
+        port = _as_int_port(svc.get("port"))
+        if port is None:
+            continue  # port column is NOT NULL; skip un-parseable entries
         db.add(
             MissionPort(
                 mission_uid=mid,
-                port=svc["port"],
+                port=port,
                 service_name=svc.get("service_name"),
                 version=svc.get("version"),
                 status=svc.get("status", "pending"),
-                attempts=svc.get("attempts", 0),
+                attempts=_as_int(svc.get("attempts", 0)),
                 history=svc.get("history") or [],
             )
         )
@@ -171,7 +196,7 @@ async def add_finding(
 ) -> Finding:
     finding = Finding(
         mission_uid=_as_uuid(mission_uuid),
-        port=data.get("port"),
+        port=_as_int_port(data.get("port")),
         service_name=data.get("service_name"),
         action=data.get("action"),
         command=data.get("command"),

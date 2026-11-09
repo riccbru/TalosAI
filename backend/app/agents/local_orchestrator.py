@@ -16,6 +16,7 @@ from app.agents.tester import get_tester_agent
 from app.agents.usage import extract_usage  # noqa: F401 (kept for symmetry/future use)
 from app.core import errors
 from app.core.config import settings  # noqa: F401 (kept for symmetry/future use)
+from app.core.prompts import EXPLOITATION_PLAYBOOK
 from app.core.status import _utc_now
 
 
@@ -199,7 +200,8 @@ class LocalOrchestrator:
                 "- Never fabricate CVE IDs, exploit names, or tool output.\n"
                 "- Never use placeholders. Every field must contain real data.\n"
                 "- If no exploit is found, set confirmed=false and explain in raw_output.\n"  # noqa: E501
-                "- Only operate on ports and services present in the scanner context."
+                "- Only operate on ports and services present in the scanner context.\n\n"  # noqa: E501
+                + EXPLOITATION_PLAYBOOK
             ),
             expected_output=(
                 "A JSON array of exploitation attempt objects, each containing "

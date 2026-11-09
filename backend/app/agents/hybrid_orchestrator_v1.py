@@ -12,6 +12,7 @@ from app.agents.tester import get_tester_agent
 from app.agents.usage import extract_usage
 from app.core import errors
 from app.core.config import settings
+from app.core.prompts import EXPLOITATION_PLAYBOOK
 
 
 _GEMINI_PROVIDER = "gemini"
@@ -154,9 +155,15 @@ class HybridOrchestratorV1:
             agent=self.local_executor,
             description=(
                 f"Based on this strategy:\n{strategy_text}\n"
-                f"Execute the initial service discovery on {self.target} using nmap."
+                f"First run service discovery on {self.target} with nmap, then for each "  # noqa: E501
+                "open service attempt to prove exploitable vulnerabilities, capturing "
+                "the complete raw terminal output of every command.\n\n"
+                + EXPLOITATION_PLAYBOOK
             ),
-            expected_output="Raw terminal output from the executed commands.",
+            expected_output=(
+                "Raw terminal output of every executed command (nmap plus any "
+                "exploitation attempts), including the proof-command output."
+            ),
         )
         return [scan_task]
 
@@ -166,7 +173,9 @@ class HybridOrchestratorV1:
         planning_prompt = (
             f"You are the master planner for a penetration test against: {self.target}.\n"  # noqa: E501
             f"User Directive: {self.user_prompt}\n"
-            "Generate a clear, bulleted execution strategy for a local tool executor."  # noqa: E501
+            "Generate a clear, bulleted execution strategy for a local tool executor. "  # noqa: E501
+            "Favor automated Metasploit modules over manual scripts, and plan to prove "  # noqa: E501
+            "any access with non-interactive commands (whoami; id; uname -a)."
         )
         response_planner, latency = gemini_backoff.generate(
             planning_prompt,

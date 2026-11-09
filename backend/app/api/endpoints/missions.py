@@ -112,7 +112,7 @@ async def _require_owned_mission(
     return mission
 
 
-@ws_router.websocket("/ws/{mission_uuid}")
+@ws_router.websocket("/{mission_uuid}")
 async def mission_stream(
     websocket: WebSocket,
     mission_uuid: str,
@@ -126,8 +126,16 @@ async def mission_stream(
     state. Dedupe findings by their `uuid` (a brief snapshot/stream overlap is
     possible by design).
     """
+    # Accept first, then validate: closing a WebSocket *before* accept makes
+    # Starlette answer the handshake with an opaque HTTP 403. Accepting lets us
+    # send a readable error frame + a meaningful close code instead.
+    await websocket.accept()
+
     payload = decode_access_token(token)
     if not payload or not payload.get("sub"):
+        await websocket.send_json(
+            {"type": "error", "code": 4401, "detail": "invalid or expired token"}
+        )
         await websocket.close(code=4401)  # unauthorized
         return
     user_uid = payload["sub"]
@@ -135,6 +143,9 @@ async def mission_stream(
     try:
         mission_key = str(uuid_lib.UUID(str(mission_uuid)))
     except ValueError:
+        await websocket.send_json(
+            {"type": "error", "code": 4404, "detail": "malformed mission uuid"}
+        )
         await websocket.close(code=4404)
         return
 
@@ -146,6 +157,13 @@ async def mission_stream(
                 db, mission_key, user_uid=user_uid
             )
             if mission is None:
+                await websocket.send_json(
+                    {
+                        "type": "error",
+                        "code": 4404,
+                        "detail": "mission not found or not owned by this user",
+                    }
+                )
                 await websocket.close(code=4404)
                 return
             ports = await crud_missions.get_ports(db, mission_key)
@@ -165,7 +183,6 @@ async def mission_stream(
                 "interrupted",
             )
 
-        await websocket.accept()
         await websocket.send_json(snapshot)
 
         if terminal:
