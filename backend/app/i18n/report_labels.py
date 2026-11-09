@@ -56,7 +56,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "no_output": "No output captured.",
         "no_findings": "No confirmed vulnerabilities were found.",
         # --- FinOps / resource usage ---
-        "finops_title": "Resource Usage (FinOps)",
+        "finops_title": "Token Usage",
         "col_agent": "Agent",
         "col_model": "Model",
         "col_provider": "Provider",
@@ -104,7 +104,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "no_output": "Nessun output catturato.",
         "no_findings": "Nessuna vulnerabilità confermata rilevata.",
         # --- FinOps / resource usage ---
-        "finops_title": "Consumo Risorse (FinOps)",
+        "finops_title": "Consumo Token",
         "col_agent": "Agente",
         "col_model": "Modello",
         "col_provider": "Provider",
@@ -152,7 +152,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "no_output": "Aucune sortie capturée.",
         "no_findings": "Aucune vulnérabilité confirmée n'a été détectée.",
         # --- FinOps / resource usage ---
-        "finops_title": "Consommation de Ressources (FinOps)",
+        "finops_title": "Consommation de Jetons",
         "col_agent": "Agent",
         "col_model": "Modèle",
         "col_provider": "Fournisseur",
