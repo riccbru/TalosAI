@@ -8,6 +8,7 @@ from fastapi import (
     Depends,
     HTTPException,
     Query,
+    Response,
     WebSocket,
     WebSocketDisconnect,
     status,
@@ -21,7 +22,7 @@ from app.db.session import AsyncSessionLocal, get_db
 from app.models.missions import RESUMABLE_STATUSES
 from app.models.users import User
 from app.schemas.missions import MissionRequest
-from app.services import mission_runner
+from app.services import mission_runner, report_service
 
 
 router = APIRouter()
@@ -323,6 +324,38 @@ async def get_mission_detail(
         "models": crud_missions.serialize_models_map(usage_rows),
         "metrics": crud_missions.aggregate_metrics(usage_rows, mission),
     }
+
+
+@router.get("/{mission_uuid}/report")
+async def download_mission_report(
+    mission_uuid: str,
+    lang: str = Query("en", pattern="^(it|en|fr)$"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> Response:
+    """Render the mission's validated findings as a localized PDF report.
+
+    Only *confirmed* findings (validated commands) are included. The PDF is
+    returned inline so it can be previewed in a browser tab.
+    """
+    mission = await _require_owned_mission(db, mission_uuid, current_user.uuid)
+    findings, _total = await crud_missions.get_findings_filtered(
+        db, mission.uuid, confirmed=True, limit=10_000, offset=0
+    )
+    try:
+        pdf_bytes = report_service.render_report_pdf(mission, findings, lang)
+    except ImportError as exc:  # WeasyPrint / native libs unavailable
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="PDF rendering backend (WeasyPrint) is not available.",
+        ) from exc
+
+    filename = f"TalosAI_Report_{mission.uuid}_{lang}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="{filename}"'},
+    )
 
 
 @router.post("/{mission_uuid}/resume", status_code=status.HTTP_202_ACCEPTED)
