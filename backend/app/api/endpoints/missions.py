@@ -16,6 +16,7 @@ from fastapi import (
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user
+from app.core.config import TALOS_TARGET_NETWORK
 from app.core.security import decode_access_token
 from app.crud import crud_missions
 from app.db.session import AsyncSessionLocal, get_db
@@ -29,35 +30,55 @@ router = APIRouter()
 ws_router = APIRouter()  # mounted WITHOUT the HTTP auth dependency (see main.py)
 
 
-def resolve_target_ip(target: str) -> str:
-    if (target.strip().lower() != 'metasploitable'):
-        return target
-    else:
-        try:
-            client = docker.from_env()
-            container = client.containers.get('talos_metasploitable')
+# Lab targets live in the isolated `talos_targets` network, each with a stable
+# container_name. A target alias maps the user-facing name to that container.
+# NOTE: single-container step — the fully generic multi-target resolver lands
+# with the broader target-architecture change (metasploitable3, ...).
+_TARGET_CONTAINERS = {
+    "metasploitable": "talos_metasploitable2",   # back-compat alias
+    "metasploitable2": "talos_metasploitable2",
+}
 
-            networks = container.attrs['NetworkSettings']['Networks']
-            for net_name, net_info in networks.items():
-                ip = net_info['IPAddress']
-                if ip:
-                    return ip
-        except Exception as e:
-            print(
-                f"\033[1;41m[DOCKER API ERROR]\033[0m] " \
-                f"Impossible to inspect container {'talos_metasploitable'}: {e}"
-            )
+
+def _target_container(target: str) -> Optional[str]:
+    """Container name for a known lab target, or None for a free-form host/IP."""
+    return _TARGET_CONTAINERS.get(target.strip().lower())
+
+
+def resolve_target_ip(target: str) -> str:
+    """IP of a lab target on the isolated target network (for the report/record).
+
+    Reads the address on TALOS_TARGET_NETWORK specifically; a free-form target
+    (raw host/IP) is returned unchanged."""
+    container_name = _target_container(target)
+    if not container_name:
+        return target
+    try:
+        client = docker.from_env()
+        container = client.containers.get(container_name)
+        networks = container.attrs['NetworkSettings']['Networks']
+        net = networks.get(TALOS_TARGET_NETWORK)
+        if net and net.get('IPAddress'):
+            return net['IPAddress']
+        # fallback: any attached network (non-segmented dev)
+        for net_info in networks.values():
+            if net_info.get('IPAddress'):
+                return net_info['IPAddress']
+    except Exception as e:
+        print(
+            f"\033[1;41m[DOCKER API ERROR]\033[0m] "
+            f"Impossible to inspect container {container_name}: {e}"
+        )
     return target
 
 
 def scan_host(target: str) -> str:
     """Hostname actually used in the scan commands. Returns a Docker DNS name
-    (resolved live by Kali) rather than a frozen IP, so the mission always hits
-    the right container even if Docker reshuffles addresses across restarts.
+    (the target's container_name, resolved live by Kali over the shared target
+    network) rather than a frozen IP, so the mission always hits the right
+    container even if Docker reshuffles addresses across restarts.
     `resolve_target_ip` is kept only to record target_ip for reference."""
-    if target.strip().lower() == "metasploitable":
-        return "talos_metasploitable"
-    return target
+    return _target_container(target) or target
 
 
 # Maps the public ?orch filter to stored orchestrator_version values.

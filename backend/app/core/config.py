@@ -6,6 +6,14 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from app.core.prompts import EXPLOITATION_PLAYBOOK
 
 
+# Docker network names — fixed infra constants (not secrets, never change).
+# Control plane holds the DB and backend; the target network is `--internal`
+# (no egress) and shared only with Kali. Kali's IP on TALOS_TARGET_NETWORK is
+# the correct reverse-shell LHOST.
+TALOS_SVC_NETWORK = "talos_network"
+TALOS_TARGET_NETWORK = "talos_targets"
+
+
 class AgentConfig(BaseModel):
     model: str
     system_prompt: str

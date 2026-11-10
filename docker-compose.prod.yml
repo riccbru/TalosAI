@@ -52,6 +52,7 @@ services:
     container_name: talos_kali
     networks:
       - talos_network
+      - talos_targets
     tty: true
     stdin_open: true
     command: tail -f /dev/null
@@ -64,29 +65,13 @@ services:
           cpus: "2"
           memory: 4G
 
-  metasploitable:
-    image: tleemcjr/metasploitable2
-    container_name: talos_metasploitable
-    networks:
-      - talos_network
-    ports:
-      - "8081:80"      # Web Console (Mutillidae, DVWA)
-      - "2121:21"      # FTP
-      - "2222:22"      # SSH
-      - "2323:23"      # Telnet
-      - "4444:4444"    # Metasploit Default Listener
-      - "3306:3306"    # MySQL
-      - "5433:5432"    # PostgreSQL
-      - "8180:8180"    # Apache Tomcat
-    stdin_open: true
-    tty: true
-    command: >
-      sh -c "/bin/services.sh && bash"
-
 networks:
   talos_network:
     driver: bridge
     name: talos_network
+  talos_targets:
+    external: true
+    name: talos_targets
 
 volumes:
   postgres_data:

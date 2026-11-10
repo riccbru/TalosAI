@@ -9,10 +9,21 @@ import psutil
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
+from app.core.config import TALOS_TARGET_NETWORK
 from app.core.ollama import ollama_client
 
 
 BACKEND_START_TIME = datetime.now(timezone.utc)
+
+
+def _pick_net(networks: dict, preferred: str) -> dict:
+    """Return the preferred network's settings, or the first attached one.
+
+    Kali and the targets now live on the segmented target network; this picks
+    that interface (``preferred``) and degrades gracefully to whatever single
+    network is attached in a non-segmented dev setup.
+    """
+    return networks.get(preferred) or next(iter(networks.values()), {})
 
 
 def _utc_now():
@@ -189,7 +200,8 @@ async def get_kali_status():
         state = attrs.get("State", {})
 
         networks = attrs.get("NetworkSettings", {}).get("Networks", {})
-        target_net = networks.get("talos_network")
+        # kali straddles both nets; report its target-facing interface (the LHOST).
+        target_net = _pick_net(networks, TALOS_TARGET_NETWORK)
         # high latency: 1800ms???
         # stats = container.stats(stream=False)
         # cpu_usage = stats['cpu_stats']['cpu_usage']['total_usage']
@@ -224,11 +236,11 @@ async def get_metapsloitable_status():
     t0 = time.perf_counter()
     try:
         client = docker.from_env()
-        container = client.containers.get("talos_metasploitable")
+        container = client.containers.get("talos_metasploitable2")
         attrs = container.attrs
         state = attrs.get("State", {})
         networks = attrs.get("NetworkSettings", {}).get("Networks", {})
-        target_net = networks.get("talos_network", {})
+        target_net = _pick_net(networks, TALOS_TARGET_NETWORK)
         mem_limit = attrs["HostConfig"]["Memory"]
 
         latency_ms = round((time.perf_counter() - t0) * 1000, 3)

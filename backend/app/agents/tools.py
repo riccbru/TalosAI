@@ -2,6 +2,8 @@ import docker
 from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
 
+from app.core.config import TALOS_TARGET_NETWORK
+
 # Hard cap per command: a tool that never returns (e.g. msfconsole holding an
 # open session) would otherwise block the worker forever and make cancel/resume
 # ineffective. `timeout` kills it, exec_run returns, and the worker unblocks.
@@ -110,15 +112,18 @@ class KaliTerminalTool(BaseTool):
 
 
 def kali_lhost() -> str | None:
-    """Kali's current IP on the target network — the correct LHOST for reverse
-    shells. Resolved live (the cached handle is reload()ed) so it's always right
-    even if Docker reassigns the address across restarts."""
+    """Kali's current IP on the *target* network — the correct LHOST for reverse
+    shells. Kali straddles the control-plane and target networks, so we must read
+    the address on TALOS_TARGET_NETWORK (where the targets live); the control-plane
+    IP would be unreachable from a compromised target. Resolved live (the cached
+    handle is reload()ed) so it's always right even if Docker reassigns it."""
 
     def _read() -> str | None:
         kali = _get_container(KALI_CONTAINER)
         kali.reload()  # refresh NetworkSettings on the cached handle
         nets = kali.attrs["NetworkSettings"]["Networks"]
-        net = nets.get("talos_network") or next(iter(nets.values()), None)
+        # Prefer the target network; fall back to any attached net (single-net dev).
+        net = nets.get(TALOS_TARGET_NETWORK) or next(iter(nets.values()), None)
         return net.get("IPAddress") if net else None
 
     try:

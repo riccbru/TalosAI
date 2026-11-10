@@ -1,0 +1,16 @@
+services:
+
+  metasploitable2:
+    image: tleemcjr/metasploitable2
+    container_name: talos_metasploitable2
+    networks:
+      - talos_targets
+    stdin_open: true
+    tty: true
+    command: >
+      sh -c "/bin/services.sh && bash"
+
+networks:
+  talos_targets:
+    external: true
+    name: talos_targets
