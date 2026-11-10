@@ -9,21 +9,42 @@ import psutil
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
-from app.core.config import TALOS_TARGET_NETWORK
 from app.core.ollama import ollama_client
 
 
 BACKEND_START_TIME = datetime.now(timezone.utc)
 
 
-def _pick_net(networks: dict, preferred: str) -> dict:
-    """Return the preferred network's settings, or the first attached one.
+def _network_list(attrs: dict) -> list:
+    """Every Docker network a container is attached to — one object per network.
 
-    Kali and the targets now live on the segmented target network; this picks
-    that interface (``preferred``) and degrades gracefully to whatever single
-    network is attached in a non-segmented dev setup.
+    Services are multi-homed now (e.g. the backend sits on both ``talos_network``
+    and ``talos_data``), so the status exposes an array instead of a single
+    network summary. Each entry mirrors the old shape.
     """
-    return networks.get(preferred) or next(iter(networks.values()), {})
+    networks = attrs.get("NetworkSettings", {}).get("Networks", {}) or {}
+    return [
+        {
+            "internal_name": name,
+            "ip_address": cfg.get("IPAddress"),
+            "gateway": cfg.get("Gateway"),
+            "mac_address": cfg.get("MacAddress"),
+        }
+        for name, cfg in networks.items()
+    ]
+
+
+def _container_networks(name: str) -> list:
+    """Network list for a container resolved by name ([] if absent or on error).
+
+    Used by services whose status isn't built from a Docker inspect (db,
+    backend) and tolerant of services that aren't stack containers at all.
+    """
+    try:
+        container = docker.from_env().containers.get(name)
+        return _network_list(container.attrs)
+    except Exception:
+        return []
 
 
 def _utc_now():
@@ -84,6 +105,7 @@ async def get_database_status(db: AsyncSession, engine: AsyncEngine) -> dict:
                 "state": connection_state,
                 "latency_ms": latency_ms,
             },
+            "network": _container_networks("talos_db"),
             "pool": pool_stats,
             "warnings": warnings,
         }
@@ -162,6 +184,7 @@ def get_backend_status() -> dict:
                 "used_percent": round(used_disk / total_disk * 100, 1),
             },
             "gpu": gpus,
+            "network": _container_networks("talos_backend"),
             "warnings": warnings,
         }
 
@@ -186,6 +209,9 @@ async def get_ollama_status() -> dict:
                 "currently_active": len(active_models.models),
                 "total_installed": len(models_library.models),
             },
+            # Ollama runs on the host (OLLAMA_BASE_URL=host.docker.internal), not
+            # as a stack container, so it has no Docker network to report.
+            "network": _container_networks("talos_ollama"),
             "active_models": active_models.get("models", []),
             "library": models_library.get("models", []),
         }
@@ -199,9 +225,6 @@ async def get_kali_status():
         attrs = container.attrs
         state = attrs.get("State", {})
 
-        networks = attrs.get("NetworkSettings", {}).get("Networks", {})
-        # kali straddles both nets; report its target-facing interface (the LHOST).
-        target_net = _pick_net(networks, TALOS_TARGET_NETWORK)
         # high latency: 1800ms???
         # stats = container.stats(stream=False)
         # cpu_usage = stats['cpu_stats']['cpu_usage']['total_usage']
@@ -217,12 +240,7 @@ async def get_kali_status():
             "status": "up" if state.get("Status") == "running" else "down",
             "timestamp": _utc_now(),
             "latency_ms": latency_ms,
-            "network": {
-                "gateway": target_net.get("Gateway"),
-                "ip_address": target_net.get("IPAddress"),
-                "mac_address": target_net.get("MacAddress"),
-                "internal_name": next(iter(networks.keys())) if networks else "none",
-            },
+            "network": _network_list(attrs),
             "resources": {
                 # "cpu_usage_percent": cpu_usage,
                 "memory_usage_mb": (
@@ -239,8 +257,6 @@ async def get_metapsloitable_status():
         container = client.containers.get("talos_metasploitable2")
         attrs = container.attrs
         state = attrs.get("State", {})
-        networks = attrs.get("NetworkSettings", {}).get("Networks", {})
-        target_net = _pick_net(networks, TALOS_TARGET_NETWORK)
         mem_limit = attrs["HostConfig"]["Memory"]
 
         latency_ms = round((time.perf_counter() - t0) * 1000, 3)
@@ -253,12 +269,7 @@ async def get_metapsloitable_status():
             "status": "up" if state.get("Status") == "running" else "down",
             "timestamp": _utc_now(),
             "latency_ms": latency_ms,
-            "network": {
-                "gateway": target_net.get("Gateway"),
-                "ip_address": target_net.get("IPAddress"),
-                "mac_address": target_net.get("MacAddress"),
-                "internal_name": next(iter(networks.keys())) if networks else "none",
-            },
+            "network": _network_list(attrs),
             "resources": {
                 "memory_usage_mb": (
                     round(mem_limit / (1024**2), 2) if mem_limit > 0 else "unlimited"

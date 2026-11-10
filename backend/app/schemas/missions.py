@@ -4,7 +4,7 @@ from pydantic import BaseModel, Field
 
 
 class MissionRequest(BaseModel):
-    target: str = Field(..., example="metasploitable")
+    target: str = Field(..., example="metasploitable2")
     prompt: Optional[str] = Field(
         None,
         description="Optional instructions to guide the agent's strategy.",
