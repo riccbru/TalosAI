@@ -1,12 +1,14 @@
+name: Deploy Targets
+
 services:
 
   metasploitable2:
+    tty: true
+    stdin_open: true
     image: tleemcjr/metasploitable2
     container_name: talos_metasploitable2
     networks:
       - talos_targets
-    stdin_open: true
-    tty: true
     command: >
       sh -c "/bin/services.sh && bash"
 

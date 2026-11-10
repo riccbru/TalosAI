@@ -48,7 +48,6 @@ jobs:
       - name: Provision isolated target network
         run: |
           docker network inspect talos_targets >/dev/null 2>&1 || docker network create --internal talos_targets
-          docker rm -f talos_metasploitable >/dev/null 2>&1 || true
           docker compose -f docker-compose.targets.yml up -d
 
       - name: Reset DB if DEV=true
