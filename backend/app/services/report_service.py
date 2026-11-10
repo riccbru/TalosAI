@@ -2,7 +2,9 @@
 
 Renders the Jinja2 template ``templates/pentest_report.html`` with the labels of
 the requested language (see :mod:`app.i18n`) and compiles it to a PDF with
-WeasyPrint. Only *confirmed* findings (validated commands) are reported.
+WeasyPrint. The Findings section lists *confirmed* findings (validated
+commands); unconfirmed findings are still consumed to mark which unexploited
+services were actually attacked ("Attempted") versus never attacked.
 
 WeasyPrint is imported lazily inside :func:`render_report_pdf` so that a missing
 native dependency (pango/cairo/gdk-pixbuf) degrades to a clear error on the
@@ -139,16 +141,29 @@ def _shape_findings(findings: List[Finding], pmap: dict) -> List[dict]:
     return shaped
 
 
-def _not_hacked(ports: Optional[List[dict]], hacked_ports: set) -> List[dict]:
-    """Discovered services whose port was NOT successfully exploited."""
+def _not_hacked(
+    ports: Optional[List[dict]],
+    hacked_ports: set,
+    attempted_ports: set,
+) -> List[dict]:
+    """Discovered services whose port was NOT successfully exploited.
+
+    Each row carries ``attempted``: True when at least one real exploitation
+    command was executed against the port (a finding exists, confirmed or not),
+    False when the engine ran no exploit against it (recon-only or skipped). The
+    report renders this as "Attempted" vs "Not attempted" so an unexploited
+    service is never mistaken for one that was proven secure.
+    """
     rows = []
     for p in ports or []:
-        if p.get("port") in hacked_ports:
+        pn = p.get("port")
+        if pn in hacked_ports:
             continue
         rows.append({
-            "port": p.get("port"),
+            "port": pn,
             "service": _clean(p.get("service_name")),
             "version": _clean(p.get("version")),
+            "attempted": pn in attempted_ports,
         })
     return rows
 
@@ -169,7 +184,18 @@ def build_report_html(
     )
     labels = get_labels(lang)
     pmap = _port_map(ports)
-    shaped_findings = _shape_findings(findings, pmap)
+
+    # `findings` holds every recorded attempt (confirmed + unconfirmed). A
+    # Finding row exists only when a real exploitation command was executed, so
+    # the set of ports with any real-exploit finding = the ports we attacked.
+    real_findings = [
+        f for f in findings if _is_real_exploit(getattr(f, "command", None))
+    ]
+    confirmed_findings = [f for f in real_findings if getattr(f, "confirmed", False)]
+    attempted_ports = {f.port for f in real_findings if f.port is not None}
+
+    # The Findings section shows confirmed exploitations only (unchanged).
+    shaped_findings = _shape_findings(confirmed_findings, pmap)
     hacked_ports = {f["port"] for f in shaped_findings}
     return template.render(
         lang=lang,
@@ -186,7 +212,7 @@ def build_report_html(
         ) or labels["not_available"],
         generated=_fmt_dt(datetime.now(timezone.utc)),
         findings=shaped_findings,
-        not_hacked=_not_hacked(ports, hacked_ports),
+        not_hacked=_not_hacked(ports, hacked_ports, attempted_ports),
         finops=usage_table or {"rows": [], "total": {}},
     )
 

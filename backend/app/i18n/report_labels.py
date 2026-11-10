@@ -43,6 +43,13 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "findings_summary": "confirmed vulnerabilities identified.",
         "not_hacked_title": "Services Not Compromised",
         "not_hacked_none": "Every discovered service was compromised.",
+        "not_hacked_note": (
+            "Attempted — an exploit was executed but access could not be "
+            "confirmed. Not attempted — no exploit was run against the service."
+        ),
+        "col_outcome": "Outcome",
+        "outcome_attempted": "Attempted",
+        "outcome_not_attempted": "Not attempted",
         "col_service": "Service",
         "col_version": "Version",
         "col_port": "Port",
@@ -91,6 +98,14 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "findings_summary": "vulnerabilità confermate identificate.",
         "not_hacked_title": "Servizi Non Compromessi",
         "not_hacked_none": "Tutti i servizi rilevati sono stati compromessi.",
+        "not_hacked_note": (
+            "Tentato — un exploit è stato eseguito ma l'accesso non è stato "
+            "confermato. Non tentato — nessun exploit è stato lanciato contro "
+            "il servizio."
+        ),
+        "col_outcome": "Esito",
+        "outcome_attempted": "Tentato",
+        "outcome_not_attempted": "Non tentato",
         "col_service": "Servizio",
         "col_version": "Versione",
         "col_port": "Porta",
@@ -139,6 +154,13 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "findings_summary": "vulnérabilités confirmées identifiées.",
         "not_hacked_title": "Services Non Compromis",
         "not_hacked_none": "Tous les services détectés ont été compromis.",
+        "not_hacked_note": (
+            "Tenté — un exploit a été exécuté mais l'accès n'a pas pu être "
+            "confirmé. Non tenté — aucun exploit n'a été lancé contre le service."
+        ),
+        "col_outcome": "Résultat",
+        "outcome_attempted": "Tenté",
+        "outcome_not_attempted": "Non tenté",
         "col_service": "Service",
         "col_version": "Version",
         "col_port": "Port",

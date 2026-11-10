@@ -357,12 +357,16 @@ async def download_mission_report(
 ) -> Response:
     """Render the mission's validated findings as a localized PDF report.
 
-    Only *confirmed* findings (validated commands) are included. The PDF is
-    returned inline so it can be previewed in a browser tab.
+    The Findings section lists *confirmed* findings (validated commands);
+    unconfirmed findings classify unexploited services as attacked or not. The
+    PDF is returned inline so it can be previewed in a browser tab.
     """
     mission = await _require_owned_mission(db, mission_uuid, current_user.uuid)
+    # All findings (confirmed + unconfirmed): the report shows confirmed ones as
+    # findings and uses the unconfirmed ones to tell an attacked-but-unexploited
+    # service apart from one that was never attacked.
     findings, _total = await crud_missions.get_findings_filtered(
-        db, mission.uuid, confirmed=True, limit=10_000, offset=0
+        db, mission.uuid, confirmed=None, limit=10_000, offset=0
     )
     usage_rows = await crud_missions.get_model_usage(db, mission.uuid)
     usage_table = crud_missions.serialize_usage_table(usage_rows)
