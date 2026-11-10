@@ -18,14 +18,15 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init:/docker-entrypoint-initdb.d:ro
     networks:
-      - talos_network
+      - talos_data            # internal-only; reachable solely by the backend
 
   backend:
     build: ./backend
     ports:
       - "8000:8000"
     networks:
-      - talos_network
+      - talos_network         # egress (Gemini/Ollama) + API
+      - talos_data            # the ONLY service that reaches the db
     volumes:
       - ./backend:/app
       - /var/run/docker.sock:/var/run/docker.sock
@@ -44,8 +45,10 @@ services:
   # kali:
   #   image: vxcontrol/kali-linux:latest
   #   container_name: talos_kali
+  #   # air-gapped: only on the (external) target network — see docker-compose.targets.yml.
+  #   # Create it first:  docker network create --internal talos_targets
   #   networks:
-  #     - talos_network
+  #     - talos_targets
   #   tty: true
   #   stdin_open: true
   #   command: tail -f /dev/null
@@ -59,9 +62,15 @@ services:
   #         memory: 4G
 
 networks:
+  # App/egress plane: backend only (serves the API, reaches Gemini/Ollama).
   talos_network:
     driver: bridge
     name: talos_network
+  # Data plane: db + backend only, no Internet egress.
+  talos_data:
+    driver: bridge
+    internal: true
+    name: talos_data
 
 volumes:
   postgres_data:
