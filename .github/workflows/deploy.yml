@@ -45,6 +45,12 @@ jobs:
           REPORTER_MODEL=${{ secrets.REPORTER_MODEL }}
           EOF
 
+      - name: Provision isolated target network
+        run: |
+          docker network inspect talos_targets >/dev/null 2>&1 || docker network create --internal talos_targets
+          docker rm -f talos_metasploitable >/dev/null 2>&1 || true
+          docker compose -f docker-compose.targets.yml up -d
+
       - name: Reset DB if DEV=true
         run: |
           if [ "${{ secrets.DEV }}" = "true" ]; then
@@ -58,7 +64,7 @@ jobs:
         run: |
           if [ "${{ secrets.DEV }}" = "true" ]; then
             docker compose -f docker-compose.prod.yml up -d db;
-            until docker compose -f docker-compose.prod.yml exec -T db pg_isready -U postgres; do
+            until docker compose -f docker-compose.prod.yml exec -T db pg_isready -U "${{ secrets.POSTGRES_USER }}"; do
               sleep 1;
             done;
           fi
@@ -70,9 +76,9 @@ jobs:
         run: |
           if [ "${{ secrets.DEV }}" = "true" ] && [ -f ~/seed.sql ]; then
             docker compose -f docker-compose.prod.yml cp ~/seed.sql db:/tmp/seed.sql;
-            docker compose -f docker-compose.prod.yml exec -T db psql -U postgres -d talos_db -f /tmp/seed.sql;
+            docker compose -f docker-compose.prod.yml exec -T db psql -U "${{ secrets.POSTGRES_USER }}" -d "${{ secrets.POSTGRES_DB }}" -f /tmp/seed.sql;
             docker compose -f docker-compose.prod.yml exec -T db rm /tmp/seed.sql;
           fi
 
       - name: Deploy Containers
-        run: docker compose -f docker-compose.prod.yml up -d
+        run: docker compose -f docker-compose.prod.yml up -d --remove-orphans
