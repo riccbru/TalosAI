@@ -438,6 +438,9 @@ class HybridOrchestratorV2:
                     f"What we tried so far on this port:\n{json.dumps(history_of_this_port, indent=2)}\n\n"  # noqa: E501
                     f"Decide the next step. If you found a vulnerability/access point or concluded it is not vulnerable, "  # noqa: E501
                     f"set action to 'NEXT_PORT' or 'COMPLETED'. Otherwise, provide the exact 'specific_command' for the tester.\n"  # noqa: E501
+                    "\nMETHODOLOGY:\n"
+                    "- You may use ANY tool available in Kali Linux, not only Metasploit. Choose the tool best suited to the service and justify why.\n"  # noqa: E501
+                    "- Before attempting an exploit, enumerate first (exact version, paths, default credentials, configuration). Work by hypothesis: observe the output -> form a hypothesis -> adapt the next command.\n"  # noqa: E501
                     f"{exploit_hint}"
                     "\nRules for 'specific_command' (the tester runs it verbatim, and the pentester must be able to copy-paste it to reproduce the finding):\n"  # noqa: E501
                     "- Prefer Metasploit or target-specific automated tools over raw .py/.rb exploitdb scripts.\n"  # noqa: E501
