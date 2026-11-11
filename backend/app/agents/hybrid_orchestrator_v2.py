@@ -435,6 +435,7 @@ class HybridOrchestratorV2:
                 manager_prompt = (
                     f"You are the Lead Pentester managing an attack loop against target {self.target}.\n"  # noqa: E501
                     f"Current Focus -> Port: {port}, Service: {name}, Version: {version}.\n"  # noqa: E501
+                    f"TARGET IP: {self.target}. Use EXACTLY this IP as the host/RHOSTS in EVERY command. NEVER use 127.0.0.1, localhost, or any other address — those point at the Kali box itself, not the target.\n"  # noqa: E501
                     f"What we tried so far on this port:\n{json.dumps(history_of_this_port, indent=2)}\n\n"  # noqa: E501
                     f"Decide the next step. If you found a vulnerability/access point or concluded it is not vulnerable, "  # noqa: E501
                     f"set action to 'NEXT_PORT' or 'COMPLETED'. Otherwise, provide the exact 'specific_command' for the tester.\n"  # noqa: E501
@@ -446,7 +447,7 @@ class HybridOrchestratorV2:
                     "- Prefer Metasploit or target-specific automated tools over raw .py/.rb exploitdb scripts.\n"  # noqa: E501
                     "- The command MUST be non-interactive and self-terminating: it must NEVER leave an open shell or console (that hangs the run).\n"  # noqa: E501
                     "- For Metasploit, use exactly this shape:\n"
-                    f"  msfconsole -q -x \"use <module>; set RHOSTS <ip>; set RPORT <port>; <other options>; run -z; {self._proof_clause()}; exit -y\"\n"  # noqa: E501
+                    f"  msfconsole -q -x \"use <module>; set RHOSTS {self.target}; set RPORT {port}; <other options>; run -z; {self._proof_clause()}; exit -y\"\n"  # noqa: E501
                     "    * 'run -z' opens the session in the background instead of dropping into an interactive shell.\n"  # noqa: E501
                     f"    * the proof clause runs these commands, in order, on the opened session: {', '.join(self._PROOF_COMMANDS)}. Use one 'sessions -c' per command (msfconsole splits -x on ';'), and single-quote any multi-token command (e.g. sessions -c 'uname -a').\n"  # noqa: E501
                     "    * always finish with 'exit -y' so msfconsole quits.\n"
