@@ -13,10 +13,19 @@ services:
       sh -c "/bin/services.sh && bash"
 
   metasploitable3:
-    tty: true
-    stdin_open: true
     image: kirscht/metasploitable3-ub1404
     container_name: talos_metasploitable3
+    entrypoint: /entrypoint.sh
+    environment:
+      PASS: msfadmin
+      ROOT: "yes"
+      CUPS: "yes"
+      FTP: "yes"
+      HTTP: "yes"
+      IRC: "yes"
+      SMB: "yes"
+      SSH: "yes"
+      SQL: "yes"
     networks:
       - talos_targets
 
