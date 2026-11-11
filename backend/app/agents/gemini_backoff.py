@@ -20,7 +20,13 @@ from app.core.config import settings
 
 
 # Single client + global throttle shared across all orchestrators.
-client = genai.Client()
+# A per-request timeout is essential: without it a stalled HTTP call hangs the
+# worker thread forever — no backoff, no error, the mission just freezes. On
+# timeout the call raises and is retried as a transient error (see below).
+_REQUEST_TIMEOUT_MS = 60_000  # 60s; manager/scanner responses return in seconds
+client = genai.Client(
+    http_options=genai.types.HttpOptions(timeout=_REQUEST_TIMEOUT_MS)
+)
 
 # Gemini free tier allows ~15 requests/min per model. Stay safely under that with
 # a client-side throttle. ~4.5s spacing => <14/min.
@@ -85,15 +91,20 @@ def generate(
             "503" in msg or "UNAVAILABLE" in msg
             or "500" in msg or "INTERNAL" in msg
         )
-        if (is_rate_limit or is_transient_server) and _retry < _MAX_RETRIES:
+        # A stalled request hits the client timeout and raises; retry it instead
+        # of failing the mission (the previous hang had no timeout at all).
+        is_timeout = any(
+            s in msg.lower() for s in ("timeout", "timed out", "deadline")
+        )
+        if (is_rate_limit or is_transient_server or is_timeout) and _retry < _MAX_RETRIES:  # noqa: E501
             if is_rate_limit:
                 # 429 carries a precise retryDelay from Google; honor it.
                 delay = parse_retry_delay(msg)
                 reason = "rate limit (429)"
             else:
-                # 503/500 carry no retryDelay: exponential backoff 2,4,8,16,32..60s.
+                # timeout / 503 / 500: exponential backoff 2,4,8,16,32..60s.
                 delay = min(2.0 * (2 ** _retry), 60.0)
-                reason = "transient server error (503/500)"
+                reason = "timeout" if is_timeout else "transient server error (503/500)"  # noqa: E501
             if on_log:
                 on_log(
                     f"Gemini {reason}; backing off {delay:.0f}s "
