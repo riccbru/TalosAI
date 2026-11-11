@@ -12,6 +12,26 @@ services:
     command: >
       sh -c "/bin/services.sh && bash"
 
+  metasploitable3:
+    tty: true
+    stdin_open: true
+    image: kirscht/metasploitable3-ub1404
+    container_name: talos_metasploitable3
+    networks:
+      - talos_targets
+
+  # juiceshop:
+  #   image: bkimminich/juice-shop
+  #   container_name: talos_juiceshop
+  #   networks:
+  #     - talos_targets
+
+  # dvwa:
+  #   image: vulnerables/web-dvwa
+  #   container_name: talos_dvwa
+  #   networks:
+  #     - talos_targets
+
 networks:
   talos_targets:
     external: true
