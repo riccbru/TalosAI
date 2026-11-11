@@ -17,12 +17,13 @@ and the evidence Validation Layer that confirms every finding.
 - [1. System Overview](#1-system-overview)
   - [End-to-End Operational Workflow](#end-to-end-operational-workflow)
   - [Performance (last reference mission)](#performance-last-reference-mission)
-- [2. Execution Decoupling](#2-execution-decoupling-api--worker--websocket)
-- [3. The Orchestrator V2 Loop](#3-the-orchestrator-v2-loop)
-- [4. Exploit-First + Short-Circuit](#4-exploit-first--short-circuit)
-- [5. The Validation Layer](#5-the-validation-layer-evidence-confirmation)
-- [6. Universal Usage Tracking](#6-universal-usage-tracking-finops)
-- [7. Resilience & Fault Tolerance](#7-resilience--fault-tolerance)
+- [2. Network Segmentation](#2-network-segmentation)
+- [3. Execution Decoupling](#3-execution-decoupling-api--worker--websocket)
+- [4. The Orchestrator V2 Loop](#4-the-orchestrator-v2-loop)
+- [5. Exploit-First + Short-Circuit](#5-exploit-first--short-circuit)
+- [6. The Validation Layer](#6-the-validation-layer-evidence-confirmation)
+- [7. Universal Usage Tracking](#7-universal-usage-tracking-finops)
+- [8. Resilience & Fault Tolerance](#8-resilience--fault-tolerance)
 
 ---
 
@@ -157,8 +158,8 @@ Kali.
 
 | Agent (role) | Model | Provider | Prompt | Completion | Total | Calls | LLM latency (s) |
 |--------------|-------|----------|-------:|-----------:|------:|------:|----------------:|
-| **scanner** (Nmap parsing) | `gemini-3.1-flash-lite-preview` | gemini | 5,077 | 1,081 | 6,158 | 1 | 3.34 |
-| **manager** (attack decisioning) | `gemini-3.1-flash-lite-preview` | gemini | 40,166 | 6,391 | 46,557 | 45 | 75.16 |
+| **scanner** (Nmap parsing) | `gemini-3.1-flash-lite` | gemini | 5,077 | 1,081 | 6,158 | 1 | 3.34 |
+| **manager** (attack decisioning) | `gemini-3.1-flash-lite` | gemini | 40,166 | 6,391 | 46,557 | 45 | 75.16 |
 | **Total** | — | — | **45,243** | **7,472** | **52,715** | **46** | **78.50** |
 
 | Mission-level metric | Value |
@@ -171,12 +172,71 @@ Kali.
 | Confirmed vulnerabilities | 11 |
 
 > The data above is read directly from the mission's `models` and `metrics`
-> blocks (see [`last_mission_results.json`](./last_mission_results.json)), the
-> same shape returned by `GET /talos/api/missions/{uuid}`.
+> blocks — the same shape returned by `GET /talos/api/missions/{uuid}` (see
+> [API — Missions](./api/missions.md)).
 
 ---
 
-## 2. Execution Decoupling (API ⇄ Worker ⇄ WebSocket)
+## 2. Network Segmentation
+
+The stack runs on **three Docker networks** that split it into a control/egress
+plane, an isolated data plane and an air-gapped target range. The backend is the
+only dual-homed service, and it drives Kali through the **Docker socket**
+(`exec_run`), not over the network — so Kali needs no route to the control
+plane at all.
+
+| Network | Members | Egress | Purpose |
+|---------|---------|--------|---------|
+| `talos_network` | backend | bridge (Internet) | Serve the API; outbound to Gemini / Ollama |
+| `talos_data` | backend, db | `internal` (none) | PostgreSQL reachable only by the backend |
+| `talos_targets` | kali, targets | `internal` (none) | Kali air-gapped together with the targets |
+
+```mermaid
+flowchart TB
+    NET(("Internet<br/>Gemini / Ollama"))
+
+    N1{{"talos_network<br/>bridge · egress"}}
+    N2{{"talos_data<br/>internal · no egress"}}
+    N3{{"talos_targets<br/>internal · no egress"}}
+
+    BE["talos_backend<br/>API + orchestrator"]
+    DB[("talos_db<br/>PostgreSQL")]
+    KALI["talos_kali<br/>attacker / pivot"]
+    TGT["vulnerable targets"]
+
+    N1 --> NET
+    BE --- N1
+    BE --- N2
+    DB --- N2
+    KALI --- N3
+    TGT --- N3
+    BE -. "Socket Docker exec_run (no network)" .-> KALI
+```
+
+**Isolation invariants**
+
+- Kali is absent from the control plane: it cannot reach `talos_db` or
+  `talos_backend`, and has no Internet egress — a compromised payload cannot
+  exfiltrate or pivot out of the range.
+- A compromised target reaches *only* Kali on `talos_targets`; the data plane and
+  the backend stay unreachable.
+- The backend reaches the DB over `talos_data` and the Internet over
+  `talos_network`, and reaches Kali only through the Docker socket — never over a
+  shared network.
+- `talos_targets` is an `external` network (created once with
+  `docker network create --internal talos_targets`) shared with
+  `docker-compose.targets.yml`, so targets can be added or recreated independently
+  of the core stack; `talos_network` and `talos_data` are owned by the prod
+  compose.
+
+> Segmentation is verifiable on a live host with `docker inspect` (per-network
+> IPs) and `docker exec` reachability probes: the allowed paths (Kali → target,
+> backend → db) succeed, while the blocked ones (Kali → control plane,
+> target → Internet) fail.
+
+---
+
+## 3. Execution Decoupling (API ⇄ Worker ⇄ WebSocket)
 
 The orchestrator is **fully synchronous** (blocking `docker exec`, `time.sleep`
 throttling, a synchronous Gemini client). Running it on the FastAPI event loop
@@ -224,7 +284,7 @@ sequenceDiagram
 
 ---
 
-## 3. The Orchestrator V2 Loop
+## 4. The Orchestrator V2 Loop
 
 `HybridOrchestratorV2.run()` executes two phases:
 
@@ -254,7 +314,7 @@ worker. A hard `timeout -k 10 180` wraps every command as a second safety net.
 
 ---
 
-## 4. Exploit-First + Short-Circuit
+## 5. Exploit-First + Short-Circuit
 
 Two optimizations cut both latency and token spend on services with
 well-known vulnerabilities (e.g. *metasploitable*).
@@ -297,7 +357,7 @@ exploiting complex services.
 
 ---
 
-## 5. The Validation Layer (Evidence Confirmation)
+## 6. The Validation Layer (Evidence Confirmation)
 
 TalosAI never marks a vulnerability as confirmed on plausibility alone — only on
 **observed execution evidence**. Two complementary mechanisms exist.
@@ -337,7 +397,7 @@ requires at least one `confirmed=true` finding backed by non-empty raw output.
 
 ---
 
-## 6. Universal Usage Tracking (FinOps)
+## 7. Universal Usage Tracking (FinOps)
 
 Every LLM call is accounted for, **provider-agnostically**. A normalization layer
 (`agents/usage.py`) maps each provider's native token fields to a single triple
@@ -358,7 +418,7 @@ The detail endpoint exposes a per-agent `models` block and an aggregated
 
 ---
 
-## 7. Resilience & Fault Tolerance
+## 8. Resilience & Fault Tolerance
 
 | Concern | Mechanism |
 |---------|-----------|
@@ -368,6 +428,8 @@ The detail endpoint exposes a per-agent `models` block and an aggregated
 | Container restart | Cached Docker client/handle with defensive reconnect on `NotFound`/`APIError` |
 | User cancellation | Cooperative `threading.Event`, checked at safe checkpoints (between ports/attempts) → `interrupted` (resumable) |
 | Crash mid-mission | Durable per-port roster + findings → `resume` replays only unfinished ports |
+
+---
 
 <div style="display: flex; justify-content: space-between; align-items: center;">
   <a href="./index.md">← Documentation</a>
