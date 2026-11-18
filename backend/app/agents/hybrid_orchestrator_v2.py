@@ -27,18 +27,24 @@ class LLMResponseError(Exception):
     """
 
 # Evidence that a command actually achieved access/execution on the target.
+# Hard execution evidence ONLY. Prose phrases ("code execution", "authenticated",
+# "privilege escalation", "login successful", "already exploited") were removed:
+# they also appear in the module listings printed by `msfconsole search` /
+# `searchsploit` (e.g. "...Remote Code Execution"), so a mere recon search was
+# being marked as a confirmed compromise — and short-circuited the port before any
+# real exploit ran. A confirmation must prove an actual session or `id`/`whoami`
+# output on the target.
 _CONFIRM_PATTERNS = [
     r"session \d+ opened",
     r"meterpreter session \d+ opened",
     r"command shell session \d+ opened",
-    r"\buid=\d+\(",                 # output of `id`/`whoami` with uid
-    r"backdoor has been spawned",
-    r"login successful",
-    r"already exploited",           # vsftpd: backdoor port already open = confirmed
-    r"code execution",
-    r"authenticated",
-    r"privilege escalation",
+    r"\buid=\d+\(",                 # output of `id`/`whoami` with a real uid
+    r"backdoor has been spawned",   # specific msf success line, absent from search output  # noqa: E501
 ]
+
+# A reconnaissance command (msfconsole `search` / `searchsploit`), not an exploit:
+# on its own it can never confirm a compromise, whatever its listing contains.
+_SEARCH_CMD_RE = re.compile(r"\b(?:search|searchsploit)\b", re.IGNORECASE)
 
 
 class DiscoveredService(BaseModel):
@@ -208,7 +214,12 @@ class HybridOrchestratorV2:
         Returns whether the command looks confirmed, so the caller can decide to
         short-circuit (#2).
         """
-        confirmed = self._looks_confirmed(cmd_output)
+        # A recon/search command never confirms a compromise (its module listing
+        # may contain evidence-like words); only a real executed exploit can. This
+        # also stops a search from short-circuiting the port before exploitation.
+        confirmed = not _SEARCH_CMD_RE.search(command or "") and self._looks_confirmed(
+            cmd_output
+        )
         history.append(
             {
                 "command_sent": command,
