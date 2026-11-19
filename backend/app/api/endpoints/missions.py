@@ -20,7 +20,7 @@ from app.core.config import TALOS_TARGET_NETWORK
 from app.core.security import decode_access_token
 from app.crud import crud_missions
 from app.db.session import AsyncSessionLocal, get_db
-from app.models.missions import RESUMABLE_STATUSES
+from app.models.missions import RESUMABLE_STATUSES, MissionStatus
 from app.models.users import User
 from app.schemas.missions import MissionRequest
 from app.services import mission_runner, report_service
@@ -105,17 +105,73 @@ def _orch_to_versions(orch: Optional[str]) -> Optional[list]:
     return versions
 
 
+# Valid mission statuses (source of truth: MissionStatus enum).
+_STATUS_VALUES = [s.value for s in MissionStatus]
+
+# Maps the public ?model filter to the stored usage `provider` value.
+_MODEL_PROVIDERS = {
+    "ollama": "ollama",   # local LLMs
+    "gemini": "gemini",   # Google API
+}
+
+
+def _validate_status(value: Optional[str]) -> Optional[str]:
+    if not value:
+        return None
+    normalized = value.strip().lower()
+    if normalized not in _STATUS_VALUES:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Invalid status '{value}'. Use one of: "
+                f"{', '.join(_STATUS_VALUES)}."
+            ),
+        )
+    return normalized
+
+
+def _model_to_provider(model: Optional[str]) -> Optional[str]:
+    if not model:
+        return None
+    provider = _MODEL_PROVIDERS.get(model.strip().lower())
+    if provider is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Invalid model '{model}'. Use one of: "
+                f"{', '.join(_MODEL_PROVIDERS)}."
+            ),
+        )
+    return provider
+
+
 @router.get("")
 async def list_missions(
+    target: Optional[str] = Query(
+        None, description="Filter by substring match on target or target_ip"
+    ),
     orch: Optional[str] = Query(
         None, description="Filter by orchestrator: local | hybrid | v1 | v2"
+    ),
+    status: Optional[str] = Query(
+        None, description=f"Filter by status: {' | '.join(_STATUS_VALUES)}"
+    ),
+    model: Optional[str] = Query(
+        None, description="Filter by LLM: ollama (local) | gemini (Google API)"
     ),
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> list:
     versions = _orch_to_versions(orch)
+    status_filter = _validate_status(status)
+    provider = _model_to_provider(model)
     missions = await crud_missions.list_missions(
-        db, current_user.uuid, versions=versions
+        db,
+        current_user.uuid,
+        versions=versions,
+        target=target,
+        status=status_filter,
+        provider=provider,
     )
     return [crud_missions.serialize_mission(m) for m in missions]
 

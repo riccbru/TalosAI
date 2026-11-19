@@ -17,8 +17,14 @@ from sqlalchemy import select
 
 import app.api.endpoints.missions as missions_module
 from app.core.security import create_access_token
-from app.models.missions import Finding, Mission, MissionPort
+from app.models.missions import (
+    Finding,
+    Mission,
+    MissionModelUsage,
+    MissionPort,
+)
 from app.services import mission_runner
+
 
 pytestmark = pytest.mark.anyio
 
@@ -49,6 +55,9 @@ def mission_factory(db_sessionmaker):
         *,
         status: str = "completed",
         target: str = "scanme.nmap.org",
+        target_ip: str | None = None,
+        version: str = "v2",
+        providers: list | None = None,
         ports: list | None = None,
         findings: list | None = None,
     ) -> Mission:
@@ -56,13 +65,22 @@ def mission_factory(db_sessionmaker):
             mission = Mission(
                 user_uid=user.uuid,
                 target=target,
-                target_ip=target,
+                target_ip=target if target_ip is None else target_ip,
                 prompt="probe",
-                orchestrator_version="v2",
+                orchestrator_version=version,
                 status=status,
             )
             s.add(mission)
             await s.flush()
+            for i, prov in enumerate(providers or []):
+                s.add(
+                    MissionModelUsage(
+                        mission_uid=mission.uuid,
+                        agent=f"agent{i}",
+                        model=f"{prov}-model",
+                        provider=prov,
+                    )
+                )
             for p in ports or []:
                 s.add(
                     MissionPort(
@@ -439,3 +457,129 @@ async def test_findings_invalid_limit_is_422(client, user_factory, mission_facto
         f"{BASE}/{mission.uuid}/findings?limit=0", headers=_auth(user)
     )
     assert zero.status_code == 422
+
+
+# --- list filters (target / orch / status / model) ---
+
+
+async def test_list_ordered_desc_by_created_at(
+    client, user_factory, mission_factory
+):
+    user = await user_factory()
+    first = await mission_factory(user, target="host-a")
+    second = await mission_factory(user, target="host-b")
+    third = await mission_factory(user, target="host-c")
+
+    resp = await client.get(BASE, headers=_auth(user))
+    assert resp.status_code == 200
+    data = resp.json()
+    assert [m["uuid"] for m in data] == [
+        str(third.uuid),
+        str(second.uuid),
+        str(first.uuid),
+    ]
+
+
+async def test_list_filter_by_target_matches_target_and_ip(
+    client, user_factory, mission_factory
+):
+    user = await user_factory()
+    await mission_factory(user, target="scanme.nmap.org", target_ip="10.0.0.9")
+    await mission_factory(user, target="metasploitable", target_ip="10.0.0.5")
+    await mission_factory(user, target="example.com", target_ip="192.168.1.1")
+
+    # matches on the target hostname (case-insensitive substring)
+    by_name = await client.get(f"{BASE}?target=SCANME", headers=_auth(user))
+    assert by_name.status_code == 200
+    assert {m["target"] for m in by_name.json()} == {"scanme.nmap.org"}
+
+    # matches on target_ip too
+    by_ip = await client.get(f"{BASE}?target=10.0.0", headers=_auth(user))
+    assert {m["target"] for m in by_ip.json()} == {"scanme.nmap.org", "metasploitable"}
+
+
+async def test_list_filter_by_orch(client, user_factory, mission_factory):
+    user = await user_factory()
+    await mission_factory(user, version="local")
+    await mission_factory(user, version="v1")
+    await mission_factory(user, version="v2")
+
+    local = await client.get(f"{BASE}?orch=local", headers=_auth(user))
+    assert {m["orchestrator_version"] for m in local.json()} == {"local"}
+
+    hybrid = await client.get(f"{BASE}?orch=hybrid", headers=_auth(user))
+    assert {m["orchestrator_version"] for m in hybrid.json()} == {"v1", "v2"}
+
+
+async def test_list_filter_by_status(client, user_factory, mission_factory):
+    user = await user_factory()
+    await mission_factory(user, status="completed")
+    await mission_factory(user, status="failed")
+    await mission_factory(user, status="running")
+
+    resp = await client.get(f"{BASE}?status=failed", headers=_auth(user))
+    assert resp.status_code == 200
+    assert {m["status"] for m in resp.json()} == {"failed"}
+
+
+async def test_list_filter_by_status_invalid_is_400(
+    client, user_factory, mission_factory
+):
+    user = await user_factory()
+    await mission_factory(user)
+    resp = await client.get(f"{BASE}?status=bogus", headers=_auth(user))
+    assert resp.status_code == 400
+
+
+async def test_list_filter_by_model_provider(
+    client, user_factory, mission_factory
+):
+    user = await user_factory()
+    ollama = await mission_factory(user, target="local-run", providers=["ollama"])
+    await mission_factory(user, target="gem-run", providers=["gemini"])
+    # a mixed mission counts for either provider
+    mixed = await mission_factory(
+        user, target="mixed-run", providers=["ollama", "gemini"]
+    )
+
+    only_ollama = await client.get(f"{BASE}?model=ollama", headers=_auth(user))
+    assert only_ollama.status_code == 200
+    assert {m["uuid"] for m in only_ollama.json()} == {
+        str(ollama.uuid),
+        str(mixed.uuid),
+    }
+
+    # filtering out gemini runs == asking for ollama only; gemini filter is the
+    # complement and must exclude the pure-ollama mission.
+    only_gemini = await client.get(f"{BASE}?model=gemini", headers=_auth(user))
+    assert str(ollama.uuid) not in {m["uuid"] for m in only_gemini.json()}
+
+
+async def test_list_filter_by_model_invalid_is_400(
+    client, user_factory, mission_factory
+):
+    user = await user_factory()
+    await mission_factory(user)
+    resp = await client.get(f"{BASE}?model=gpt", headers=_auth(user))
+    assert resp.status_code == 400
+
+
+async def test_list_filters_combine(client, user_factory, mission_factory):
+    user = await user_factory()
+    want = await mission_factory(
+        user, target="metasploitable", status="completed",
+        version="local", providers=["ollama"],
+    )
+    # same target but wrong status / provider / orch -> excluded
+    await mission_factory(user, target="metasploitable", status="failed",
+                          version="local", providers=["ollama"])
+    await mission_factory(user, target="metasploitable", status="completed",
+                          version="v2", providers=["gemini"])
+
+    resp = await client.get(
+        f"{BASE}?target=metasplo&status=completed&orch=local&model=ollama",
+        headers=_auth(user),
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert [m["uuid"] for m in data] == [str(want.uuid)]

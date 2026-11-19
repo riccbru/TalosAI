@@ -78,11 +78,32 @@ async def list_missions(
     db: AsyncSession,
     user_uid: UUIDLike,
     versions: Optional[List[str]] = None,
+    target: Optional[str] = None,
+    status: Optional[str] = None,
+    provider: Optional[str] = None,
 ) -> List[Mission]:
     stmt = select(Mission).where(Mission.user_uid == _as_uuid(user_uid))
     if versions:
         stmt = stmt.where(Mission.orchestrator_version.in_(versions))
-    stmt = stmt.order_by(Mission.created_at.desc())
+    if target:
+        pattern = f"%{target.strip()}%"
+        stmt = stmt.where(
+            Mission.target.ilike(pattern) | Mission.target_ip.ilike(pattern)
+        )
+    if status:
+        stmt = stmt.where(Mission.status == status)
+    if provider:
+        # A mission "uses" a provider if any of its per-agent usage rows were
+        # served by it (ollama = local LLMs, gemini = Google API, ...).
+        stmt = stmt.where(
+            select(MissionModelUsage.id)
+            .where(
+                MissionModelUsage.mission_uid == Mission.uuid,
+                MissionModelUsage.provider == provider,
+            )
+            .exists()
+        )
+    stmt = stmt.order_by(Mission.created_at.desc(), Mission.id.desc())
     result = await db.execute(stmt)
     return list(result.scalars().all())
 
