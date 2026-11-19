@@ -252,8 +252,7 @@ async def mission_stream(
                 "mission": crud_missions.serialize_mission(mission),
                 "ports": [crud_missions.serialize_port(p) for p in ports],
                 "findings": [crud_missions.serialize_finding(f) for f in findings],
-                "models": crud_missions.serialize_models_map(usage_rows),
-                "metrics": crud_missions.aggregate_metrics(usage_rows, mission),
+                "usage": crud_missions.serialize_usage(usage_rows, mission),
             }
             terminal = mission.status in (
                 "completed",
@@ -398,9 +397,7 @@ async def get_mission_detail(
         "mission": crud_missions.serialize_mission(mission),
         "ports": [crud_missions.serialize_port(p) for p in ports],
         "findings": [crud_missions.serialize_finding(f) for f in findings],
-        "models": crud_missions.serialize_models_map(usage_rows),
-        "metrics": crud_missions.aggregate_metrics(usage_rows, mission),
-        "usage_table": crud_missions.serialize_usage_table(usage_rows),
+        "usage": crud_missions.serialize_usage(usage_rows, mission),
     }
 
 
@@ -425,7 +422,7 @@ async def download_mission_report(
         db, mission.uuid, confirmed=None, limit=10_000, offset=0
     )
     usage_rows = await crud_missions.get_model_usage(db, mission.uuid)
-    usage_table = crud_missions.serialize_usage_table(usage_rows)
+    usage = crud_missions.serialize_usage(usage_rows)
     ports = [
         crud_missions.serialize_port(p)
         for p in await crud_missions.get_ports(db, mission.uuid)
@@ -434,7 +431,7 @@ async def download_mission_report(
         pdf_bytes = report_service.render_report_pdf(
             mission, findings, lang,
             operator_email=current_user.email,
-            usage_table=usage_table,
+            usage=usage,
             ports=ports,
         )
     except ImportError as exc:  # WeasyPrint / native libs unavailable

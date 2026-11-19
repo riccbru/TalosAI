@@ -187,7 +187,7 @@ class DBReporter:
                     "latency_seconds": round(latency_seconds, 3),
                 },
                 "agent_usage": cumulative.get("agent_usage", {}),
-                "metrics": cumulative.get("metrics", {}),
+                "total": cumulative.get("total", {}),
             }
         )
 
@@ -256,8 +256,8 @@ class DBReporter:
                     if agent_row
                     else {}
                 ),
-                # No mission passed -> no duration keys: keeps the event light.
-                "metrics": crud_missions.aggregate_metrics(rows),
+                # No mission passed -> no duration key: keeps the event light.
+                "total": crud_missions.serialize_usage(rows)["total"],
             }
 
 

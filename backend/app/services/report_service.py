@@ -173,7 +173,7 @@ def build_report_html(
     findings: List[Finding],
     lang: str,
     operator_email: Optional[str] = None,
-    usage_table: Optional[dict] = None,
+    usage: Optional[dict] = None,
     ports: Optional[List[dict]] = None,
 ) -> str:
     """Render the report template to an HTML string."""
@@ -213,7 +213,7 @@ def build_report_html(
         generated=_fmt_dt(datetime.now(timezone.utc)),
         findings=shaped_findings,
         not_hacked=_not_hacked(ports, hacked_ports, attempted_ports),
-        finops=usage_table or {"rows": [], "total": {}},
+        finops=usage or {"models": [], "total": {}},
     )
 
 
@@ -222,7 +222,7 @@ def render_report_pdf(
     findings: List[Finding],
     lang: str,
     operator_email: Optional[str] = None,
-    usage_table: Optional[dict] = None,
+    usage: Optional[dict] = None,
     ports: Optional[List[dict]] = None,
 ) -> bytes:
     """Render the localized report and compile it to PDF bytes.
@@ -233,7 +233,7 @@ def render_report_pdf(
     import weasyprint  # lazy: see module docstring
 
     html_content = build_report_html(
-        mission, findings, lang, operator_email, usage_table, ports
+        mission, findings, lang, operator_email, usage, ports
     )
     return weasyprint.HTML(
         string=html_content,

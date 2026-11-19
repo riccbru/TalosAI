@@ -399,24 +399,25 @@ def serialize_model_usage(row: MissionModelUsage) -> dict:
     }
 
 
-def serialize_models_map(rows: List[MissionModelUsage]) -> dict:
-    """{agent: {model, provider, usage{...}}} — the per-agent breakdown block."""
-    return {row.agent: serialize_model_usage(row) for row in rows}
+def serialize_usage(
+    rows: List[MissionModelUsage], mission: Optional[Mission] = None
+) -> dict:
+    """Unified LLM-usage block, the single source of truth for the shape shared
+    by the HTTP detail response, the WebSocket snapshot and the PDF report.
 
-
-def serialize_usage_table(rows: List[MissionModelUsage]) -> dict:
-    """Flat FinOps table shared by the API and the PDF report.
-
-    Returns ``{"rows": [...], "total": {...}}`` with one row per actually-used
-    (mission, agent) — unused agents have no DB row, so they are simply absent
-    (never zero-filled) — plus a grand-total row summed across them. Row order is
-    the DB insertion order (chronological), identical in both consumers.
+    ``{"models": [...], "total": {...}, "duration": {...}}`` where:
+      * ``models`` — one entry per actually-used (mission, agent), in DB
+        insertion order (chronological). Unused agents have no DB row, so they
+        are simply absent (never zero-filled).
+      * ``total``  — grand total summed across every agent.
+      * ``duration`` — mission wall-clock, present only when ``mission`` is
+        given (kept out of light-weight stream events).
     """
-    table_rows = []
+    models = []
     tot_p = tot_c = tot_t = tot_calls = 0
     tot_latency = 0.0
     for r in rows:
-        table_rows.append({
+        models.append({
             "agent": r.agent,
             "model": r.model,
             "provider": r.provider,
@@ -431,31 +432,20 @@ def serialize_usage_table(rows: List[MissionModelUsage]) -> dict:
         tot_t += r.total_tokens
         tot_calls += r.call_count
         tot_latency += r.total_latency_seconds
-    total = {
-        "prompt_tokens": tot_p,
-        "completion_tokens": tot_c,
-        "total_tokens": tot_t,
-        "call_count": tot_calls,
-        "total_latency_seconds": round(tot_latency, 3),
-    }
-    return {"rows": table_rows, "total": total}
-
-
-def aggregate_metrics(
-    rows: List[MissionModelUsage], mission: Optional[Mission] = None
-) -> dict:
-    """Totals across every agent, plus optional mission duration."""
-    metrics = {
-        "total_prompt_tokens": sum(r.prompt_tokens for r in rows),
-        "total_completion_tokens": sum(r.completion_tokens for r in rows),
-        "total_tokens": sum(r.total_tokens for r in rows),
-        "total_llm_calls": sum(r.call_count for r in rows),
-        "total_latency_seconds": round(
-            sum(r.total_latency_seconds for r in rows), 3
-        ),
+    usage = {
+        "models": models,
+        "total": {
+            "prompt_tokens": tot_p,
+            "completion_tokens": tot_c,
+            "total_tokens": tot_t,
+            "call_count": tot_calls,
+            "total_latency_seconds": round(tot_latency, 3),
+        },
     }
     if mission is not None:
         duration_seconds, duration_hms = _mission_duration(mission)
-        metrics["duration_seconds"] = duration_seconds
-        metrics["duration"] = duration_hms
-    return metrics
+        usage["duration"] = {
+            "seconds": duration_seconds,
+            "formatted": duration_hms,
+        }
+    return usage
